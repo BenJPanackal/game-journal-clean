@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Zap, Trophy, Target, Plus, Minus, X, Edit3, Calendar, Image, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
+import IgdbSearch from "./components/IgdbSearch";
+import type { IgdbGame } from "./components/IgdbSearch";
+
+
 
 // Mock data with realistic game color schemes, streak information, and completed games
 const mockGames = [
@@ -380,6 +384,25 @@ const Badge = ({ children, className = '' }: { children: React.ReactNode; classN
     {children}
   </span>
 );
+function mapIgdbToCard(g: IgdbGame) {
+  return {
+    id: g.id,
+    title: g.name,
+    image: g.coverUrl || "",
+    cover: g.coverUrl || "",
+    lastPlayed: "Never",
+    progress: 0,
+    hoursPlayed: 0,
+    category: "wishlist",       // you can change this default later
+    releaseYear: g.year ?? undefined,
+    streak: 0,
+    colors: {
+      primary: "#6366F1",
+      secondary: "#10B981",
+      accent: "#F59E0B",
+    },
+  };
+}
 
 export default function App() {
   const [activeCategory, setActiveCategory] = useState<'inprogress' | 'completed'>('inprogress');
@@ -388,7 +411,6 @@ export default function App() {
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
   const [selectedGame, setSelectedGame] = useState<any>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [journalEntries, setJournalEntries] = useState([mockJournalEntry]);
   const [entryExpanded, setEntryExpanded] = useState(false);
@@ -775,36 +797,17 @@ export default function App() {
               </div>
               
               <div className="max-w-xl mx-auto">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search IGDB for games to add to your library..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3 bg-input/60 border-2 border-primary/50 focus:border-primary/80 rounded-lg text-sm readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 smooth-transition z-depth-1"
-                    style={{
-                      boxShadow: '0 0 10px rgba(var(--primary), 0.15), 0 2px 6px rgba(0, 0, 0, 0.2)'
-                    }}
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => {
-                        console.log('❌ Clearing IGDB search');
-                        setSearchQuery('');
-                      }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-muted rounded fast-transition"
-                    >
-                      <X className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  )}
-                  <SearchSuggestions
-                    query={searchQuery}
-                    games={mockGames}
-                    onSelect={handleSearchSelect}
-                  />
-                </div>
+                <IgdbSearch
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  onSelect={(g) => {
+                    // put selected game into your normal flow
+                    setSearchQuery(g.name);
+                    handleGameClick(mapIgdbToCard(g));
+                  }}
+                />
               </div>
+
             </div>
 
             {/* SUBTLE HORIZONTAL BORDER SEPARATOR - Much more gentle */}
