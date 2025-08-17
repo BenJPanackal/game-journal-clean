@@ -164,6 +164,33 @@ const mockJournalEntry = {
   tags: ["Boss Fight", "Story Beat", "Epic Moment"],
   screenshot: "https://images.unsplash.com/photo-1580234820958-493f3681d1e4?w=400&h=300&fit=crop"
 };
+// ✅ New unique name to avoid collision
+function igdbToGameCard(g: IgdbGame) {
+  const coverUrl = g.cover?.image_id
+    ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg`
+    : "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop";
+
+  return {
+    id: g.id,
+    title: g.name,
+    image: coverUrl,
+    cover: coverUrl,
+    lastPlayed: "Never",
+    progress: 0,
+    hoursPlayed: 0,
+    category: "wishlist" as const,
+    releaseYear: g.first_release_date
+      ? new Date(g.first_release_date * 1000).getFullYear()
+      : undefined,
+    streak: 0,
+    colors: {
+      primary: "#6366F1",
+      secondary: "#10B981",
+      accent: "#F59E0B",
+    },
+  };
+}
+
 
 const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) => (
   <div 
@@ -337,47 +364,6 @@ const MainGameCard = ({ game, onClick, isLargest = false }: { game: any; onClick
   );
 };
 
-const SearchSuggestions = ({ query, games, onSelect }: { query: string; games: any[]; onSelect: (game: any) => void }) => {
-  const allGames = [...games, ...mockCompletedGames];
-  const filteredGames = allGames.filter(game => 
-    game.title.toLowerCase().includes(query.toLowerCase()) ||
-    game.releaseYear.toString().includes(query)
-  ).slice(0, 5);
-
-  if (!query || filteredGames.length === 0) return null;
-
-  console.log('🔍 Search suggestions filtered:', filteredGames.length, 'results for:', query);
-
-  return (
-    <div className="absolute top-full left-0 right-0 mt-2 search-suggestions rounded-lg overflow-hidden z-depth-4">
-      {filteredGames.map(game => (
-        <div
-          key={game.id}
-          onClick={() => {
-            console.log('🎯 Search suggestion selected:', game.title);
-            onSelect(game);
-          }}
-          className="search-suggestion-item cursor-pointer"
-        >
-          <div className="flex items-center gap-3">
-            <img
-              src={game.cover}
-              alt={game.title}
-              className="w-10 h-12 object-cover rounded border border-primary/20"
-            />
-            <div className="flex-1">
-              <h4 className="readable-text">{game.title}</h4>
-              <p className="text-xs text-muted-foreground">{game.releaseYear} • {game.category}</p>
-            </div>
-            {game.progress === 100 && (
-              <Trophy className="w-4 h-4 text-green-400" />
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 const Badge = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${className}`}>
@@ -796,17 +782,20 @@ export default function App() {
                 <p className="text-sm text-muted-foreground">Search and discover games from the Internet Game Database</p>
               </div>
               
-              <div className="max-w-xl mx-auto">
+              <div className="max-w-xl mx-auto relative">
                 <IgdbSearch
+                  endpoint="/api/igdb/search"     // <<— this must match the server
+                  payloadMode="json"              // <<— send {query:"..."} JSON
                   value={searchQuery}
                   onChange={setSearchQuery}
-                  onSelect={(g) => {
-                    // put selected game into your normal flow
+                  onSelect={(g: IgdbGame) => {
                     setSearchQuery(g.name);
                     handleGameClick(mapIgdbToCard(g));
                   }}
                 />
+
               </div>
+
 
             </div>
 

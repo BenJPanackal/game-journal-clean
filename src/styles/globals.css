@@ -385,15 +385,17 @@
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
   }
   
-  /* Search suggestions */
-  .search-suggestions {
-    background: rgba(var(--card), 0.95);
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(var(--primary), 0.3);
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.4),
-      0 0 8px rgba(var(--primary), 0.2);
-  }
+/* Solid dropdown panel — no glass */
+.search-suggestions {
+  background: var(--card);             /* fully opaque */
+  backdrop-filter: none;               /* kill blur */
+  border: 1px solid var(--border);     /* crisp border */
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset; /* subtle inner line */
+    
+}
+
   
   .search-suggestion-item {
     transition: all 0.15s ease;
@@ -401,10 +403,13 @@
     border-bottom: 1px solid rgba(var(--border), 0.5);
   }
   
-  .search-suggestion-item:hover {
-    background: rgba(var(--primary), 0.1);
-    transform: translateX(4px);
-  }
+/* List items already have a bottom border from your existing rule.
+   We’ll just fix the hover color so it’s on-theme (no white). */
+.search-suggestion-item:hover {
+  /* Use color-mix so OKLCH variables play nice */
+  background: color-mix(in oklch, var(--primary) 16%, transparent);
+  transform: translateX(4px);
+}
   
   .search-suggestion-item:last-child {
     border-bottom: none;
@@ -559,4 +564,28 @@
     background: linear-gradient(transparent, var(--card));
     pointer-events: none;
   }
+}
+/* Keep the IGDB popover above any blurred layers */
+[data-layer="igdb-popover"] {
+  isolation: isolate;
+}
+
+/* Neon scrollbars to match your theme */
+.neon-scrollbars {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--primary), 0.5) transparent;
+}
+.neon-scrollbars::-webkit-scrollbar {
+  width: 8px;
+}
+.neon-scrollbars::-webkit-scrollbar-track {
+  background: transparent;
+}
+.neon-scrollbars::-webkit-scrollbar-thumb {
+  background: rgba(var(--primary), 0.35);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--primary), 0.5);
+}
+.neon-scrollbars::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--primary), 0.55);
 }
