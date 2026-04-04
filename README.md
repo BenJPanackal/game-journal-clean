@@ -57,12 +57,21 @@ Runs **Vite** and the **Node IGDB proxy** together (`concurrently`). Once persis
 ## Deferred / lower priority
 
 - **Recommendations / ML-style** fill for sparse sections (e.g. “recent games”) — after real data and empty states exist.
-- **Electron** shell.
-- **Docs dedup** — keep README for onboarding; keep `agents.md` as the living spec for agents.
+- **Electron + installers** for friend distribution; **in-app Twitch/IGDB credentials** and **IGDB optional at server startup** first (see [docs/distribution-gameplan.md](./docs/distribution-gameplan.md)).
+- **CI, Docker, observability** — when you pick a concrete automation goal.
+- **Docs** — README stays short; deeper spec in `agents.md` and `docs/distribution-gameplan.md`.
 
 ## Production (target)
 
 Run **one Node process** that serves the built static app from `dist/` and mounts **IGDB + persistence** routes under `/api` (exact shape TBD as the server is extended).
+
+## Distribution: friends without Git
+
+If you want **“download and double‑click”** for people who won’t clone the repo, the practical path is a **desktop build** (e.g. **Electron + electron-builder**), not a zip of the source. The app still needs a **local API** and **SQLite**, so it is not a static-only website.
+
+- **Per-user IGDB:** each person uses their **own** [Twitch Developer](https://dev.twitch.tv/) app (Client ID + Secret); don’t share one key across many users.
+- **Packaged UX:** after install, users paste keys in **Settings / first-run** — **not** `.env` (`.env` stays for **developers**).
+- **Details, DevOps standby notes, role split, and caveats** (`better-sqlite3`, Electron rebuilds): **[docs/distribution-gameplan.md](./docs/distribution-gameplan.md)**. Agent-facing priorities: **[agents.md](./agents.md)**.
 
 ## License
 

@@ -21,8 +21,39 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 - **Journal entries** with session details; **narrative / story-game** focus; **neon-style UI** — already largely acceptable; **polish can wait** until core behavior is real.
 - **Repo today:** Vite + React (**not Electron**). Browsers cannot write arbitrary files on disk — extend the **Node** server (`server/igdb-proxy.mjs` or a merged `server/index.mjs`) with **REST** that reads/writes the DB.
 - **“Real-time” in the UI:** after each successful API mutation, update React state (context / query) so lists and counts refresh immediately **without** a full reload.
-- **Distribution:** users should be able to download the project and run it locally, or eventually use an **easy non–IDE path** (often **deployment**); design APIs and build so a **single Node process** can serve **`dist/`** plus `/api` and IGDB in production.
-- **Friend installs (no Git):** see **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** — **Electron + installer** as the primary “single download” story; **each user’s own Twitch/IGDB keys** via **in-app Settings / first-run** (not `.env`); persist under **app userData**; **IGDB optional at runtime** (server must not exit if keys missing — return `igdb_not_configured`–style errors from IGDB routes until configured).
+- **Developers:** clone + lockfile + `.env` / `.env.example` + documented `npm ci` → configure env → `npm run build` → `npm start` (when production server exists). Pin **Node** (`engines` / `.nvmrc`) for repeatable installs.
+- **Single process:** design so **one Node process** can serve **`dist/`** plus `/api` and IGDB (and SQLite-backed REST) for production and for a future desktop shell.
+
+### Friend installs (no GitHub / no Git)
+
+**Target:** friends **download an installer** (e.g. **Electron + electron-builder** → `.exe` / `.dmg`), **double‑click**, use the app — **not** clone the repo. A plain static site or “open `index.html`” is **insufficient** because the app needs a **local API** and **SQLite**.
+
+**Full detail:** **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** (DevOps on standby: CI, Docker, observability — implement when given a concrete goal).
+
+**Locked product choices**
+
+- **Each user has their own Twitch Developer app** (Client ID + Secret for IGDB client-credentials). Do **not** rely on one shared key for many users (quota / ToS / abuse).
+- **Friends never use `.env`.** **Developers** keep using `.env` at repo root for local dev.
+- **Packaged app:** first run or **Settings** — short copy + link to official Twitch/IGDB docs, inputs for Client ID and Client Secret (mask secret), **Save** → persist under the OS **app user data** dir (e.g. Electron `app.getPath('userData')`), not next to the executable. Optional later: **keytar** (or similar) for the secret only.
+- **IGDB is optional until configured:** the server **must start** without Twitch env vars. **Do not** `process.exit(1)` on missing keys in the shipped path. **IGDB routes** return **`401` / `503`** and JSON like `{ "error": "igdb_not_configured" }` until credentials exist (from **env** in dev or **saved settings** in packaged builds). UI: “Add your Twitch keys in Settings” instead of broken search. **Library / journal** should still work without IGDB if the product allows it.
+- **Native modules:** **`better-sqlite3`** (and Electron’s Node ABI if applicable) require **planned rebuilds** per target OS/arch; decide **Windows-only** vs **Windows + macOS** early (signing / notarization scope).
+
+### Suggested sequence (credentials + packaging)
+
+1. **Backend:** relax startup; gate IGDB only; consistent errors; read creds from **env OR** persisted file/API.
+2. **Backend:** `GET`/`POST` (or equivalent) **settings** for IGDB credentials — validate, **never log secrets**, clear errors.
+3. **Frontend:** **Connect IGDB** / **Settings** form + optional **Test connection** / health check.
+4. **Desktop:** Electron shell (start embedded server, `userData` paths) + **electron-builder** installers; **“for friends”** one-pager: install, where data lives, how to get Twitch keys, data stays on this PC.
+
+### Role split (typical)
+
+| Area | Owner |
+|------|--------|
+| No hard exit when keys missing; gate IGDB; status codes + JSON | Backend / API |
+| Credential source: env (dev) vs saved config (packaged) | Backend |
+| Settings API: validate, persist, no secret leakage in logs | Backend |
+| First-run / Settings UI | Frontend |
+| Electron, userData, embedded server, installers | Desktop / app / full-stack |
 
 ## Locked storage decision
 
@@ -81,8 +112,9 @@ Granular `GET` / `POST` / `PATCH` for `/api/games`, `/api/entries`; optional `GE
 ## Deferred / lower priority
 
 - **Recommendations / ML-style** fill when users lack data for sections like “recent games” — **after** empty states and real persistence exist.
-- **Electron** — optional packaging; reuse persistence in main process later; **`better-sqlite3` + Electron** need planned **native rebuild** per OS/arch (see distribution gameplan).
-- **README vs agents.md** — README = onboarding; **agents.md** = living agent spec; trim duplication only when you intentionally consolidate.
+- **Electron + installers** — **primary path for “send to friends”** who won’t use Git; schedule after the **production Node server** + **IGDB optional startup** + **in-app credentials** story are in place (see **distribution gameplan**).
+- **Docker / CI / observability** — valuable for technical users and automation; follow **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** when a concrete ticket specifies provider and triggers.
+- **README vs agents.md** — README = short onboarding; **agents.md** + **docs/distribution-gameplan.md** = living spec; trim duplication only when you intentionally consolidate.
 
 ## Suggested implementation order
 
@@ -94,3 +126,4 @@ Granular `GET` / `POST` / `PATCH` for `/api/games`, `/api/entries`; optional `GE
 6. Dead code + duplicate mappers + Vite `/api` proxy.
 7. Grading UX.
 8. README / production notes (keep in sync with reality).
+9. **Friend-ready IGDB:** optional startup (no exit on missing keys), settings persistence + API, Settings / first-run UI; then **Electron + builder** + short friend-facing install doc (see **docs/distribution-gameplan.md**).
