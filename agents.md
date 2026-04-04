@@ -1,6 +1,11 @@
 # Agents
 
-**Edit this file** whenever you want to change how AI assistants should behave on this project. Cursor loads it automatically via `.cursor/rules/agents-md.mdc`—no need to duplicate the same text in other rule files.
+**Edit this file** whenever you want to change how AI assistants should behave on this project. Cursor can load it via `.cursor/rules/agents-md.mdc`; you can also `@agents.md` in chat. Do not duplicate the same guidance in other rule files unless you intend to.
+
+## How assistants should edit this file
+
+- **Prefer additive changes:** add a section or patch paragraphs in place. **Avoid replacing the entire file** unless the user asked for a full restructure or merge.
+- Treat this as **one living document** to append to over time.
 
 ## Git: commit and push after changing this file
 
