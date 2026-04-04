@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api/igdb': {
-        target: 'http://localhost:5174', // your proxy port
+      '/api': {
+        target: 'http://localhost:5174',
         changeOrigin: true,
       },
     },

@@ -14,6 +14,9 @@ node_modules/.vite/
 # --- Tailwind / PostCSS caches (just in case) ---
 .cache/
 
+# --- Local SQLite + user data (NEVER COMMIT) ---
+data/
+
 # --- Env & secrets (KEEP THESE OUT OF GIT) ---
 .env
 .env.*

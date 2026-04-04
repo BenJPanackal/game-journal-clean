@@ -6,6 +6,8 @@ dotenv.config();                       // then fall back to .env
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
+import { openDatabase } from './db.mjs';
+import { createLibraryRouter } from './library-routes.mjs';
 
 const app = express();
 
@@ -13,6 +15,9 @@ const app = express();
 app.use(cors({ origin: ['http://localhost:5173'], credentials: false }));
 app.use(express.json());
 app.use(express.text({ type: 'text/plain' })); // also accept text/plain
+
+const db = openDatabase();
+app.use('/api', createLibraryRouter(db));
 
 const {
   TWITCH_CLIENT_ID,
