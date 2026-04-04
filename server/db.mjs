@@ -78,6 +78,30 @@ function ensureSchema(db) {
   if (!columnExists(db, 'games', 'completion_memory')) {
     db.exec('ALTER TABLE games ADD COLUMN completion_memory TEXT');
   }
+  if (!columnExists(db, 'games', 'is_favorite')) {
+    db.exec('ALTER TABLE games ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnExists(db, 'games', 'favorite_rank')) {
+    db.exec('ALTER TABLE games ADD COLUMN favorite_rank INTEGER');
+  }
+
+  db.exec(`
+    UPDATE games SET is_favorite = 1 WHERE category = 'favorite';
+    UPDATE games SET category = 'recent' WHERE category = 'favorite';
+  `);
+
+  const rankFavs = db
+    .prepare(
+      `SELECT igdb_id FROM games WHERE is_favorite = 1 AND favorite_rank IS NULL ORDER BY updated_at ASC, igdb_id ASC`
+    )
+    .all();
+  const maxR = db.prepare(`SELECT MAX(favorite_rank) AS m FROM games WHERE favorite_rank IS NOT NULL`).get();
+  let nextR = maxR?.m != null && Number.isFinite(Number(maxR.m)) ? Number(maxR.m) + 1 : 0;
+  const setRank = db.prepare(`UPDATE games SET favorite_rank = ? WHERE igdb_id = ?`);
+  for (const row of rankFavs) {
+    setRank.run(nextR, row.igdb_id);
+    nextR += 1;
+  }
 }
 
 export function openDatabase() {
@@ -106,6 +130,11 @@ export function rowToGame(row) {
     completionMemory: row.completion_memory != null ? String(row.completion_memory) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    isFavorite: Number(row.is_favorite) === 1,
+    favoriteRank:
+      row.favorite_rank != null && Number.isFinite(Number(row.favorite_rank))
+        ? Number(row.favorite_rank)
+        : null,
   };
 }
 

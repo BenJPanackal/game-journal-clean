@@ -84,19 +84,19 @@ const SidebarGameCard = ({
                     onToggleFavorite(game);
                   }}
                   className="p-0.5 rounded hover:bg-destructive/15"
-                  title={game.category === 'favorite' ? 'Remove from favorites' : 'Add to favorites'}
-                  aria-label={game.category === 'favorite' ? 'Remove from favorites' : 'Add to favorites'}
+                  title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 >
                   <Heart
                     className={`w-3 h-3 ${
-                      game.category === 'favorite'
+                      game.isFavorite
                         ? 'text-destructive fill-destructive'
                         : 'text-muted-foreground'
                     }`}
                   />
                 </button>
               ) : (
-                game.category === 'favorite' && (
+                game.isFavorite && (
                   <Heart className="w-3 h-3 text-destructive fill-destructive" />
                 )
               )}
@@ -209,7 +209,7 @@ const MainGameCard = ({
             </div>
             
             <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-              {onToggleFavorite && !['completed', 'dud'].includes(game.category) && (
+              {onToggleFavorite && game.category !== 'dud' && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -220,10 +220,10 @@ const MainGameCard = ({
                 >
                   <Heart
                     className={`w-3 h-3 inline mr-1 align-middle ${
-                      game.category === 'favorite' ? 'fill-destructive' : ''
+                      game.isFavorite ? 'fill-destructive' : ''
                     }`}
                   />
-                  {game.category === 'favorite' ? 'Unfavorite' : 'Favorite'}
+                  {game.isFavorite ? 'Unfavorite' : 'Favorite'}
                 </button>
               )}
             </div>
@@ -257,13 +257,13 @@ const MainGameCard = ({
             </div>
           )}
           
-          {game.progress === 0 && ['recent', 'wishlist', 'favorite'].includes(game.category) && (
+          {game.progress === 0 && ['recent', 'wishlist'].includes(game.category) && (
             <div className="flex items-center gap-2 mt-4">
               <Bookmark className="w-5 h-5 text-accent" />
               <span className="text-accent">
                 {game.category === 'wishlist'
-                  ? 'On your list'
-                  : game.category === 'favorite'
+                  ? 'In your library (backlog)'
+                  : game.isFavorite
                     ? 'Favorite — not started'
                     : 'Recently added'}
               </span>
@@ -288,6 +288,14 @@ function mergeGame(list: LibraryGame[], next: LibraryGame): LibraryGame[] {
   const copy = [...list];
   copy[i] = next;
   return copy;
+}
+
+function sortByUpdatedDesc(games: LibraryGame[]): LibraryGame[] {
+  return [...games].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function isPlayingShelf(g: LibraryGame): boolean {
+  return !['completed', 'dud'].includes(g.category);
 }
 
 export default function App() {
@@ -340,30 +348,66 @@ export default function App() {
   }, [refreshLibrary]);
 
   const getTabCounts = () => ({
-    recent: libraryGames.filter((g) => g.category === 'recent').length,
-    favorite: libraryGames.filter((g) => g.category === 'favorite').length,
-    wishlist: libraryGames.filter((g) => g.category === 'wishlist').length,
+    recent: libraryGames.filter((g) => isPlayingShelf(g)).length,
+    favorite: libraryGames.filter((g) => g.isFavorite).length,
+    library: libraryGames.length,
     completed: libraryGames.filter((g) => g.category === 'completed').length,
+    completedFavorites: libraryGames.filter((g) => g.category === 'completed' && g.isFavorite).length,
     duds: libraryGames.filter((g) => g.category === 'dud').length,
   });
 
-  const getFilteredUiGames = (): UiGame[] => {
+  const dashboardRecentGames = useMemo(
+    () =>
+      sortByUpdatedDesc(libraryGames.filter((g) => isPlayingShelf(g)))
+        .slice(0, 10)
+        .map(apiGameToUiGame),
+    [libraryGames]
+  );
+
+  const sidebarFilteredGames = useMemo((): UiGame[] => {
     const q = sidebarSearchQuery.toLowerCase();
     const match = (g: LibraryGame) => g.name.toLowerCase().includes(q);
 
     if (activeCategory === 'completed') {
-      if (activeTab === 'completed' || activeTab === 'favorite') {
-        return libraryGames.filter((g) => g.category === 'completed' && match(g)).map(apiGameToUiGame);
+      if (activeTab === 'completed') {
+        return sortByUpdatedDesc(libraryGames.filter((g) => g.category === 'completed' && match(g))).map(
+          apiGameToUiGame
+        );
+      }
+      if (activeTab === 'favorite') {
+        return sortByUpdatedDesc(
+          libraryGames.filter((g) => g.category === 'completed' && g.isFavorite && match(g))
+        ).map(apiGameToUiGame);
       }
       if (activeTab === 'duds') {
         return libraryGames.filter((g) => g.category === 'dud' && match(g)).map(apiGameToUiGame);
       }
       return [];
     }
-    return libraryGames
-      .filter((g) => g.category === activeTab && match(g))
-      .map(apiGameToUiGame);
-  };
+
+    if (activeTab === 'recent') {
+      return sortByUpdatedDesc(libraryGames.filter((g) => isPlayingShelf(g) && match(g)))
+        .slice(0, 10)
+        .map(apiGameToUiGame);
+    }
+    if (activeTab === 'favorite') {
+      const favs = libraryGames.filter((g) => g.isFavorite && match(g));
+      return [...favs]
+        .sort((a, b) => {
+          const ra = a.favoriteRank;
+          const rb = b.favoriteRank;
+          if (ra != null && rb != null) return ra - rb;
+          if (ra != null) return -1;
+          if (rb != null) return 1;
+          return b.updatedAt.localeCompare(a.updatedAt);
+        })
+        .map(apiGameToUiGame);
+    }
+    if (activeTab === 'library') {
+      return sortByUpdatedDesc(libraryGames.filter(match)).map(apiGameToUiGame);
+    }
+    return [];
+  }, [libraryGames, activeCategory, activeTab, sidebarSearchQuery]);
 
   const getAvailableTabs = () => {
     if (activeCategory === 'completed') {
@@ -376,12 +420,9 @@ export default function App() {
     return [
       { id: 'recent', label: 'Recent', icon: Clock, color: 'secondary' },
       { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
-      { id: 'wishlist', label: 'List', icon: Bookmark, color: 'accent' },
+      { id: 'library', label: 'Library', icon: Bookmark, color: 'accent' },
     ];
   };
-
-  const getRecentGames = (): UiGame[] =>
-    libraryGames.filter((g) => g.category === 'recent').slice(0, 3).map(apiGameToUiGame);
 
   const handleGameClick = (game: UiGame) => {
     setSelectedGame(game);
@@ -489,11 +530,9 @@ export default function App() {
   };
 
   const handleSaveJournalEntryFromDashboard = async (payload: NewJournalEntryPayload) => {
-    const recent = getRecentGames()[0];
+    const recent = dashboardRecentGames[0];
     const listPick = libraryGames.find((g) => g.category === 'wishlist');
-    const inProgressPick = libraryGames.find((g) =>
-      ['recent', 'favorite', 'wishlist'].includes(g.category)
-    );
+    const inProgressPick = libraryGames.find((g) => isPlayingShelf(g));
     const fallback = libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null;
     const target =
       recent ?? (listPick ? apiGameToUiGame(listPick) : null) ?? (inProgressPick ? apiGameToUiGame(inProgressPick) : null) ?? fallback;
@@ -532,15 +571,30 @@ export default function App() {
   };
 
   const handleToggleFavorite = async (g: UiGame) => {
-    if (['completed', 'dud'].includes(g.category)) return;
+    if (g.category === 'dud') return;
     setLibraryError(null);
+    const next = !g.isFavorite;
+    const igdbId = g.id;
+
+    setLibraryGames((prev) =>
+      prev.map((row) => (row.igdbId === igdbId ? { ...row, isFavorite: next } : row))
+    );
+    setSelectedGame((sg) => (sg?.id === igdbId ? { ...sg, isFavorite: next } : sg));
+
     try {
-      const nextCat = g.category === 'favorite' ? 'recent' : 'favorite';
-      const updated = await patchGame(g.id, { category: nextCat });
+      const updated = await patchGame(igdbId, { isFavorite: next });
       setLibraryGames((prev) => mergeGame(prev, updated));
-      setSelectedGame((sg) => (sg?.id === g.id ? apiGameToUiGame(updated) : sg));
+      setSelectedGame((sg) => (sg?.id === igdbId ? apiGameToUiGame(updated) : sg));
+      if (next && activeCategory === 'inprogress') {
+        setActiveTab('favorite');
+      }
     } catch (e) {
       setLibraryError(e instanceof Error ? e.message : 'Could not update favorites');
+      try {
+        await refreshLibrary();
+      } catch {
+        /* ignore secondary failure */
+      }
     }
   };
 
@@ -600,6 +654,10 @@ export default function App() {
     }
   }, [activeCategory]);
 
+  useEffect(() => {
+    setActiveTab((t) => (t === 'wishlist' ? 'library' : t));
+  }, []);
+
   const entriesForSelectedGame = useMemo(() => {
     if (!selectedGame) return [];
     return libraryEntries.filter((e) => e.gameId === selectedGame.id);
@@ -617,15 +675,14 @@ export default function App() {
   }
 
   const tabCounts = getTabCounts();
-  const inProgressCount = libraryGames.filter((g) =>
-    ['recent', 'favorite', 'wishlist'].includes(g.category)
-  ).length;
+  const inProgressCount = libraryGames.filter((g) => isPlayingShelf(g)).length;
   const totalHours = libraryGames.reduce((sum, game) => sum + (game.hoursPlayed ?? 0), 0);
   const weeklyHours = '—';
   const gamesPlayedThisWeek = '—';
   const activeStreaks = 0;
   const availableTabs = getAvailableTabs();
-  const modalGame: UiGame | null = getRecentGames()[0] ?? (libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null);
+  const modalGame: UiGame | null =
+    dashboardRecentGames[0] ?? (libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -700,12 +757,17 @@ export default function App() {
                         tab.color === 'secondary' ? 'bg-secondary/20 text-secondary' :
                         'bg-accent/20 text-accent'
                       }`}>
-                        {tab.id === 'completed' ? tabCounts.completed : 
-                         tab.id === 'duds' ? tabCounts.duds :
-                         tab.id === 'favorite' && activeCategory === 'completed' ? tabCounts.completed :
-                         tab.id === 'favorite' ? tabCounts.favorite :
-                         tab.id === 'recent' ? tabCounts.recent :
-                         tabCounts.wishlist}
+                        {tab.id === 'completed'
+                          ? tabCounts.completed
+                          : tab.id === 'duds'
+                            ? tabCounts.duds
+                            : tab.id === 'favorite' && activeCategory === 'completed'
+                              ? tabCounts.completedFavorites
+                              : tab.id === 'favorite'
+                                ? tabCounts.favorite
+                                : tab.id === 'recent'
+                                  ? tabCounts.recent
+                                  : tabCounts.library}
                       </Badge>
                     )}
                   </button>
@@ -742,10 +804,15 @@ export default function App() {
         <div className="flex-1 px-4 pt-4 overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm text-muted-foreground uppercase tracking-wide">
-              {activeTab === 'recent' ? 'Recent' : 
-               activeTab === 'favorite' ? 'Favorites' : 
-               activeTab === 'wishlist' ? 'List' : 
-               activeTab === 'duds' ? 'Duds' : 'Completed'}
+              {activeTab === 'recent'
+                ? 'Recent'
+                : activeTab === 'favorite'
+                  ? 'Favorites'
+                  : activeTab === 'library'
+                    ? 'Library'
+                    : activeTab === 'duds'
+                      ? 'Duds'
+                      : 'Completed'}
             </h3>
             <div className="flex items-center gap-1">
               <button
@@ -764,7 +831,7 @@ export default function App() {
           
           {!isCollapsed && (
             <div className="space-y-2 pb-4">
-              {getFilteredUiGames().map((game) => (
+              {sidebarFilteredGames.map((game) => (
                 <SidebarGameCard
                   key={game.id}
                   game={game}
@@ -773,13 +840,13 @@ export default function App() {
                   onToggleFavorite={handleToggleFavorite}
                 />
               ))}
-              {getFilteredUiGames().length === 0 && (
+              {sidebarFilteredGames.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>
                     No{' '}
-                    {activeTab === 'wishlist'
-                      ? 'list'
+                    {activeTab === 'library'
+                      ? 'library'
                       : activeTab}{' '}
                     games found
                   </p>
@@ -899,14 +966,14 @@ export default function App() {
               <div className="lg:col-span-3">
                 <h3 className="text-2xl text-primary readable-accent mb-6">Recent Games</h3>
                 <div className="space-y-6">
-                  {getRecentGames().length === 0 && !libraryLoading && (
+                  {dashboardRecentGames.length === 0 && !libraryLoading && (
                     <p className="text-sm text-muted-foreground">
-                      No games in <strong className="text-primary">Recent</strong> yet. Add a title from IGDB — it
-                      lands here first. Use the sidebar to move games to your <strong className="text-accent">List</strong>{' '}
-                      or <strong className="text-destructive">Favorites</strong> if you like.
+                      No active games in your <strong className="text-primary">recent list</strong> yet. Add a title
+                      from IGDB, star favorites anytime, and browse everything under{' '}
+                      <strong className="text-accent">Library</strong> in the sidebar.
                     </p>
                   )}
-                  {getRecentGames().map((game, index) => (
+                  {dashboardRecentGames.map((game, index) => (
                     <MainGameCard 
                       key={game.id} 
                       game={game} 

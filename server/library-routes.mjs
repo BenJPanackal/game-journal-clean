@@ -160,6 +160,8 @@ export function createLibraryRouter(db) {
       'userRating',
       'listPrice',
       'completionMemory',
+      'isFavorite',
+      'favoriteRank',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -188,12 +190,47 @@ export function createLibraryRouter(db) {
       }
     }
 
-    if (Object.keys(patch).length === 0) {
+    const hasFavoriteFields =
+      Object.prototype.hasOwnProperty.call(body, 'isFavorite') ||
+      Object.prototype.hasOwnProperty.call(body, 'favoriteRank');
+
+    if (Object.keys(patch).length === 0 && !hasFavoriteFields) {
       return badRequest(res, 'No updatable fields provided');
     }
 
     const row = db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId);
     if (!row) return res.status(404).json({ error: 'Game not found' });
+
+    let isFavorite = Number(row.is_favorite) === 1;
+    let favoriteRank =
+      row.favorite_rank != null && Number.isFinite(Number(row.favorite_rank))
+        ? Number(row.favorite_rank)
+        : null;
+
+    if (Object.prototype.hasOwnProperty.call(body, 'isFavorite')) {
+      const v = Boolean(body.isFavorite);
+      isFavorite = v;
+      if (!v) {
+        favoriteRank = null;
+      } else if (favoriteRank == null) {
+        const maxRow = db
+          .prepare(`SELECT MAX(favorite_rank) AS m FROM games WHERE is_favorite = 1 AND igdb_id != ?`)
+          .get(igdbId);
+        const m = maxRow?.m != null && Number.isFinite(Number(maxRow.m)) ? Number(maxRow.m) : -1;
+        favoriteRank = m + 1;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'favoriteRank')) {
+      if (body.favoriteRank === null) {
+        favoriteRank = null;
+      } else {
+        const fr = Number(body.favoriteRank);
+        if (!Number.isFinite(fr) || fr < 0) {
+          return badRequest(res, 'favoriteRank must be a non-negative number or null');
+        }
+        favoriteRank = fr;
+      }
+    }
 
     const next = {
       name: patch.name != null ? String(patch.name).trim() : row.name,
@@ -244,7 +281,7 @@ export function createLibraryRouter(db) {
           : row.completion_memory,
     };
 
-    if (next.progress >= 100 && ['recent', 'favorite', 'wishlist'].includes(next.category)) {
+    if (next.progress >= 100 && ['recent', 'wishlist'].includes(next.category)) {
       const ur = Number.isFinite(next.user_rating) ? next.user_rating : null;
       if (ur == null || ur < 1 || ur > 10) {
         return badRequest(
@@ -271,7 +308,18 @@ export function createLibraryRouter(db) {
           ? Number(next.release_year)
           : null;
 
+    const patchKeys = Object.keys(patch);
+    const patchOnlyFavoriteKeys =
+      patchKeys.length > 0 && patchKeys.every((k) => k === 'isFavorite' || k === 'favoriteRank');
+    /** Starring must not reshuffle Recent/Library (sorted by updated_at). */
+    const preserveUpdatedAtForFavorite =
+      patchOnlyFavoriteKeys || (patchKeys.length === 0 && hasFavoriteFields);
+
     try {
+      const updatedAtToSet = preserveUpdatedAtForFavorite
+        ? row.updated_at
+        : db.prepare(`SELECT datetime('now') AS t`).get().t;
+
       db.prepare(`
         UPDATE games SET
           name = ?,
@@ -285,7 +333,9 @@ export function createLibraryRouter(db) {
           user_rating = ?,
           list_price = ?,
           completion_memory = ?,
-          updated_at = datetime('now')
+          is_favorite = ?,
+          favorite_rank = ?,
+          updated_at = ?
         WHERE igdb_id = ?
       `).run(
         next.name,
@@ -299,6 +349,9 @@ export function createLibraryRouter(db) {
         Number.isFinite(next.user_rating) ? next.user_rating : null,
         next.list_price != null && Number.isFinite(next.list_price) ? next.list_price : null,
         next.completion_memory != null ? next.completion_memory : null,
+        isFavorite ? 1 : 0,
+        favoriteRank,
+        updatedAtToSet,
         igdbId
       );
       res.json({ game: rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId)) });

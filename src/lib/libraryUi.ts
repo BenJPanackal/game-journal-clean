@@ -19,6 +19,8 @@ export type UiGame = {
   listPrice?: number | null;
   userRating?: number | null;
   completionMemory?: string | null;
+  isFavorite?: boolean;
+  favoriteRank?: number | null;
 };
 
 const FALLBACK_COVER =
@@ -35,6 +37,21 @@ const usdPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: '
 export function formatListPriceUsd(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—';
   return usdPrice.format(value);
+}
+
+/** Date + time (hours and minutes only, locale-aware); ISO strings from the API become readable labels. */
+export function formatLastPlayedDisplay(value: string | null | undefined): string {
+  const v = (value ?? '').trim();
+  if (!v || v === 'Never') return 'Never';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 export function igdbCoverUrl(g: IgdbGame): string {
@@ -92,7 +109,7 @@ export function apiGameToUiGame(g: LibraryGame): UiGame {
     title: g.name,
     image: cover,
     cover,
-    lastPlayed: g.lastPlayed?.trim() ? g.lastPlayed : 'Never',
+    lastPlayed: formatLastPlayedDisplay(g.lastPlayed?.trim() ? g.lastPlayed : 'Never'),
     progress: g.progress,
     hoursPlayed: g.hoursPlayed ?? 0,
     category: g.category,
@@ -103,6 +120,8 @@ export function apiGameToUiGame(g: LibraryGame): UiGame {
     listPrice: g.listPrice ?? null,
     userRating: g.userRating ?? null,
     completionMemory: g.completionMemory ?? null,
+    isFavorite: g.isFavorite ?? false,
+    favoriteRank: g.favoriteRank ?? null,
   };
 }
 

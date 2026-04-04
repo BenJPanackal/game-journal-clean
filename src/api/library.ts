@@ -19,6 +19,8 @@ export type LibraryGame = {
   completionMemory: string | null;
   createdAt: string;
   updatedAt: string;
+  isFavorite: boolean;
+  favoriteRank: number | null;
 };
 
 export type LibraryEntry = {
@@ -123,6 +125,8 @@ export async function patchGame(
     userRating: number | null;
     listPrice: number | null;
     completionMemory: string | null;
+    isFavorite: boolean;
+    favoriteRank: number | null;
   }>
 ): Promise<LibraryGame> {
   const res = await fetch(`/api/games/${igdbId}`, {
