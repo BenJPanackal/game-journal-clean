@@ -1,7 +1,7 @@
 // server/library-routes.mjs — REST API for games + journal entries
 import { Router } from 'express';
 import crypto from 'crypto';
-import { CATEGORIES, rowToGame, rowToEntry } from './db.mjs';
+import { CATEGORIES, JOURNAL_MODES, rowToGame, rowToEntry } from './db.mjs';
 
 function badRequest(res, message) {
   return res.status(400).json({ error: message });
@@ -57,28 +57,23 @@ export function createLibraryRouter(db) {
       return badRequest(res, 'progress must be between 0 and 100');
     }
 
+    let journalMode = 'story';
+    if (Object.prototype.hasOwnProperty.call(body, 'journalMode')) {
+      const jm = String(body.journalMode);
+      if (!JOURNAL_MODES.has(jm)) {
+        return badRequest(res, 'journalMode must be story or session');
+      }
+      journalMode = jm;
+    }
+
     const existedRow = db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId);
     const existedBefore = Boolean(existedRow);
 
-    let listPriceToStore;
-    if (Object.prototype.hasOwnProperty.call(body, 'listPrice')) {
-      if (body.listPrice === null) {
-        listPriceToStore = null;
-      } else {
-        const lp = Number(body.listPrice);
-        if (Number.isNaN(lp) || lp < 0) {
-          return badRequest(res, 'listPrice must be a non-negative number or null');
-        }
-        listPriceToStore = lp;
-      }
-    } else if (existedBefore) {
-      listPriceToStore =
-        existedRow.list_price != null && Number.isFinite(Number(existedRow.list_price))
-          ? Number(existedRow.list_price)
-          : null;
-    } else {
-      listPriceToStore = null;
-    }
+    const journalModeToStore = existedBefore && !Object.prototype.hasOwnProperty.call(body, 'journalMode')
+      ? JOURNAL_MODES.has(String(existedRow.journal_mode))
+        ? String(existedRow.journal_mode)
+        : 'story'
+      : journalMode;
 
     try {
       const tx = db.transaction(() => {
@@ -95,6 +90,7 @@ export function createLibraryRouter(db) {
               completed_date = ?,
               user_rating = COALESCE(?, user_rating),
               list_price = ?,
+              journal_mode = ?,
               updated_at = datetime('now')
             WHERE igdb_id = ?
           `).run(
@@ -107,15 +103,16 @@ export function createLibraryRouter(db) {
             lastPlayed,
             completedDate,
             Number.isFinite(userRating) ? userRating : null,
-            listPriceToStore,
+            existedRow.list_price,
+            journalModeToStore,
             igdbId
           );
         } else {
           db.prepare(`
             INSERT INTO games (
               igdb_id, name, cover_url, release_year, category, progress,
-              hours_played, last_played, completed_date, user_rating, list_price, completion_memory
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              hours_played, last_played, completed_date, user_rating, list_price, completion_memory, journal_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             igdbId,
             name,
@@ -127,8 +124,9 @@ export function createLibraryRouter(db) {
             lastPlayed,
             completedDate,
             Number.isFinite(userRating) ? userRating : null,
-            listPriceToStore,
-            null
+            null,
+            null,
+            journalMode
           );
         }
       });
@@ -158,10 +156,10 @@ export function createLibraryRouter(db) {
       'lastPlayed',
       'completedDate',
       'userRating',
-      'listPrice',
       'completionMemory',
       'isFavorite',
       'favoriteRank',
+      'journalMode',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -178,16 +176,12 @@ export function createLibraryRouter(db) {
       }
       patch.progress = p;
     }
-    if (patch.listPrice !== undefined) {
-      if (patch.listPrice === null) {
-        patch.listPrice = null;
-      } else {
-        const lp = Number(patch.listPrice);
-        if (Number.isNaN(lp) || lp < 0) {
-          return badRequest(res, 'listPrice must be a non-negative number or null');
-        }
-        patch.listPrice = lp;
+    if (patch.journalMode !== undefined) {
+      const jm = String(patch.journalMode);
+      if (!JOURNAL_MODES.has(jm)) {
+        return badRequest(res, 'journalMode must be story or session');
       }
+      patch.journalMode = jm;
     }
 
     const hasFavoriteFields =
@@ -267,18 +261,19 @@ export function createLibraryRouter(db) {
             ? null
             : Number(patch.userRating)
           : row.user_rating,
-      list_price:
-        patch.listPrice !== undefined
-          ? patch.listPrice == null
-            ? null
-            : Number(patch.listPrice)
-          : row.list_price,
+      list_price: row.list_price,
       completion_memory:
         patch.completionMemory !== undefined
           ? patch.completionMemory == null
             ? null
             : String(patch.completionMemory)
           : row.completion_memory,
+      journal_mode:
+        patch.journalMode !== undefined
+          ? String(patch.journalMode)
+          : row.journal_mode != null && JOURNAL_MODES.has(String(row.journal_mode))
+            ? String(row.journal_mode)
+            : 'story',
     };
 
     if (next.progress >= 100 && ['recent', 'wishlist'].includes(next.category)) {
@@ -297,9 +292,6 @@ export function createLibraryRouter(db) {
 
     if (!next.name) return badRequest(res, 'name cannot be empty');
     if (!CATEGORIES.has(next.category)) return badRequest(res, 'Invalid category');
-    if (next.list_price != null && (Number.isNaN(next.list_price) || next.list_price < 0)) {
-      return badRequest(res, 'Invalid listPrice');
-    }
 
     const releaseYearVal =
       next.release_year == null || next.release_year === ''
@@ -333,6 +325,7 @@ export function createLibraryRouter(db) {
           user_rating = ?,
           list_price = ?,
           completion_memory = ?,
+          journal_mode = ?,
           is_favorite = ?,
           favorite_rank = ?,
           updated_at = ?
@@ -349,6 +342,7 @@ export function createLibraryRouter(db) {
         Number.isFinite(next.user_rating) ? next.user_rating : null,
         next.list_price != null && Number.isFinite(next.list_price) ? next.list_price : null,
         next.completion_memory != null ? next.completion_memory : null,
+        next.journal_mode,
         isFavorite ? 1 : 0,
         favoriteRank,
         updatedAtToSet,
@@ -420,7 +414,9 @@ export function createLibraryRouter(db) {
       return badRequest(res, 'Game not in library — add the game before creating a journal entry');
     }
 
-    if (syncProgress === 100 && !['completed', 'dud'].includes(gBefore.category)) {
+    const sessionGame = String(gBefore.journal_mode || 'story') === 'session';
+
+    if (syncProgress === 100 && !sessionGame && !['completed', 'dud'].includes(gBefore.category)) {
       const fg = body.finishGame;
       if (!fg || typeof fg !== 'object') {
         return badRequest(
@@ -470,11 +466,11 @@ export function createLibraryRouter(db) {
             ? String(g.completion_memory)
             : null;
 
-        if (syncProgress != null) {
+        if (syncProgress != null && !sessionGame) {
           progress = syncProgress;
         }
 
-        if (syncProgress === 100 && !['completed', 'dud'].includes(g.category)) {
+        if (syncProgress === 100 && !sessionGame && !['completed', 'dud'].includes(g.category)) {
           category = 'completed';
           completed_date = new Date().toISOString();
           const fg = body.finishGame;

@@ -2,6 +2,9 @@
 
 export type LibraryCategory = 'recent' | 'favorite' | 'wishlist' | 'completed' | 'dud';
 
+/** Story-style entries (areas, bosses) vs session logs for live / multiplayer games. */
+export type JournalMode = 'story' | 'session';
+
 export type LibraryGame = {
   igdbId: number;
   name: string;
@@ -13,14 +16,14 @@ export type LibraryGame = {
   lastPlayed: string | null;
   completedDate: string | null;
   userRating: number | null;
-  /** Typical retail / list price in USD (nullable until set via API or future store integration). */
-  listPrice: number | null;
   /** Final thoughts saved when marking complete via journal survey. */
   completionMemory: string | null;
   createdAt: string;
   updatedAt: string;
   isFavorite: boolean;
   favoriteRank: number | null;
+  /** Omitted on older API responses; UI defaults to story. */
+  journalMode?: JournalMode;
 };
 
 export type LibraryEntry = {
@@ -97,7 +100,7 @@ export type PostGameBody = {
   lastPlayed?: string | null;
   completedDate?: string | null;
   userRating?: number | null;
-  listPrice?: number | null;
+  journalMode?: JournalMode;
 };
 
 export async function postGame(body: PostGameBody): Promise<LibraryGame> {
@@ -123,10 +126,10 @@ export async function patchGame(
     lastPlayed: string | null;
     completedDate: string | null;
     userRating: number | null;
-    listPrice: number | null;
     completionMemory: string | null;
     isFavorite: boolean;
     favoriteRank: number | null;
+    journalMode: JournalMode;
   }>
 ): Promise<LibraryGame> {
   const res = await fetch(`/api/games/${igdbId}`, {

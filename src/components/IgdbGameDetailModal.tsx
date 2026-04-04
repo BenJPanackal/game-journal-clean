@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
-import { X, BookOpen, Library, DollarSign } from 'lucide-react';
+import { X, BookOpen, Library } from 'lucide-react';
 import type { IgdbGame } from './IgdbSearch';
-import { formatListPriceUsd } from '../lib/libraryUi';
 
 type Props = {
   game: IgdbGame | null;
   inLibrary: boolean;
-  /** From local library row when the game is already saved */
-  libraryListPrice?: number | null;
   onClose: () => void;
   /** Receives the richest game object we have (merged IGDB detail + search row) for POST /api/games */
   onAddToLibrary: (g: IgdbGame) => void | Promise<void>;
@@ -17,7 +14,6 @@ type Props = {
 export default function IgdbGameDetailModal({
   game,
   inLibrary,
-  libraryListPrice = null,
   onClose,
   onAddToLibrary,
   onOpenJournal,
@@ -124,55 +120,6 @@ export default function IgdbGameDetailModal({
               {year != null && (
                 <p className="text-sm text-muted-foreground mt-1">Release year: {year}</p>
               )}
-              <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-                <p className="flex items-start gap-1.5">
-                  <DollarSign className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
-                  <span>
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground/90 block mb-0.5">
-                      Price
-                    </span>
-                    <span className="text-[11px] block opacity-80 mb-1">
-                      IGDB does not list prices. We only show a dollar amount when IGDB links this game to a
-                      Steam app and Steam’s public API returns a US store price (paid titles).
-                    </span>
-                    {merged.steamPrice ? (
-                      <span className="text-foreground block">
-                        <span className="font-medium text-lg">{merged.steamPrice.finalFormatted || formatListPriceUsd(merged.steamPrice.final)}</span>
-                        {merged.steamPrice.discountPercent > 0 && merged.steamPrice.initialFormatted && (
-                          <span className="block text-xs mt-0.5 line-through opacity-70">
-                            {merged.steamPrice.initialFormatted}
-                          </span>
-                        )}
-                        {merged.steamPrice.discountPercent > 0 && (
-                          <span className="ml-2 text-xs text-secondary">-{merged.steamPrice.discountPercent}%</span>
-                        )}
-                      </span>
-                    ) : detailLoading && !remote ? (
-                      <span className="text-xs opacity-80">Checking IGDB store links and Steam price…</span>
-                    ) : merged.steamPriceHint === "steam_linked_no_price" ? (
-                      <span className="text-xs">
-                        IGDB links Steam (app {merged.steamAppId ?? "—"}), but Steam did not return a price —
-                        common for free games, unreleased listings, or when there is no paid US price block.
-                      </span>
-                    ) : merged.steamPriceHint === "no_steam_link" ? (
-                      <span className="text-xs">
-                        IGDB has no Steam app id for this title, so we cannot ask Steam for a price. Use the
-                        store links below if another shop is listed.
-                      </span>
-                    ) : detailErr ? (
-                      <span className="text-xs">Could not load full game details — Steam price status unknown.</span>
-                    ) : (
-                      <span className="text-xs">Could not determine a Steam shelf price from available data.</span>
-                    )}
-                  </span>
-                </p>
-                {inLibrary && (
-                  <p className="pl-6 text-xs">
-                    Your saved list price:{' '}
-                    <span className="text-foreground">{formatListPriceUsd(libraryListPrice)}</span>
-                  </p>
-                )}
-              </div>
             </div>
           </div>
           <button

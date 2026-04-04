@@ -1,5 +1,7 @@
 import type { IgdbGame } from '../components/IgdbSearch';
-import type { LibraryEntry, LibraryGame } from '../api/library';
+import type { JournalMode, LibraryEntry, LibraryGame } from '../api/library';
+
+export type { JournalMode };
 
 /** Card/list shape used across App (matches former mock fields). */
 export type UiGame = {
@@ -15,12 +17,12 @@ export type UiGame = {
   streak: number;
   colors: { primary: string; secondary: string; accent: string };
   completedDate?: string;
-  /** USD list price from library row; null/undefined shows as em dash in UI */
-  listPrice?: number | null;
   userRating?: number | null;
   completionMemory?: string | null;
   isFavorite?: boolean;
   favoriteRank?: number | null;
+  /** Drives journal form fields: story vs live / multiplayer session log. */
+  journalMode: JournalMode;
 };
 
 const FALLBACK_COVER =
@@ -32,14 +34,27 @@ const DEFAULT_COLORS = {
   accent: '#F59E0B',
 };
 
-const usdPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-
-export function formatListPriceUsd(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  return usdPrice.format(value);
+/** Date + time (hours and minutes only, locale-aware); ISO strings from the API become readable labels. */
+/** Labels for the three structured entry fields (same DB columns, different copy for session games). */
+export function journalFieldLabels(mode: JournalMode | undefined): {
+  area: string;
+  boss: string;
+  item: string;
+} {
+  if (mode === 'session') {
+    return {
+      area: 'Characters / roles',
+      boss: 'Mode / playlist',
+      item: 'Highlight / outcome',
+    };
+  }
+  return {
+    area: 'Area Explored',
+    boss: 'Boss Defeated',
+    item: 'Item Found',
+  };
 }
 
-/** Date + time (hours and minutes only, locale-aware); ISO strings from the API become readable labels. */
 export function formatLastPlayedDisplay(value: string | null | undefined): string {
   const v = (value ?? '').trim();
   if (!v || v === 'Never') return 'Never';
@@ -70,13 +85,6 @@ export function igdbReleaseYear(g: IgdbGame): number | undefined {
   return undefined;
 }
 
-/** Prefer Steam final price (USD) when game-details returned Valve data linked from IGDB. */
-function igdbLinkedSteamListPriceUsd(g: IgdbGame): number | null {
-  const sp = g.steamPrice;
-  if (!sp || !Number.isFinite(sp.final)) return null;
-  return sp.final;
-}
-
 /** Build POST /api/games body when adding from IGDB (new library row). */
 export function igdbToNewLibraryGame(g: IgdbGame): {
   igdbId: number;
@@ -86,10 +94,8 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
   /** Shows under Recent; user can move to List or Favorites from the sidebar */
   category: 'recent';
   progress: number;
-  listPrice?: number | null;
 } {
   const year = igdbReleaseYear(g);
-  const listPrice = igdbLinkedSteamListPriceUsd(g);
   return {
     igdbId: g.id,
     name: g.name,
@@ -97,7 +103,6 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
     releaseYear: year != null ? year : null,
     category: 'recent',
     progress: 0,
-    ...(listPrice != null ? { listPrice } : {}),
   };
 }
 
@@ -117,11 +122,11 @@ export function apiGameToUiGame(g: LibraryGame): UiGame {
     streak: 0,
     colors: DEFAULT_COLORS,
     completedDate: g.completedDate ?? undefined,
-    listPrice: g.listPrice ?? null,
     userRating: g.userRating ?? null,
     completionMemory: g.completionMemory ?? null,
     isFavorite: g.isFavorite ?? false,
     favoriteRank: g.favoriteRank ?? null,
+    journalMode: g.journalMode === 'session' ? 'session' : 'story',
   };
 }
 

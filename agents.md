@@ -33,11 +33,11 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 **Process entry:** `node server/igdb-proxy.mjs` — single Express app, default **`PORT=3001`** (override in `.env`). Dotenv: `.env.local` then `.env`.
 
-**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Game columns include **`user_rating`** (0–10 or NULL), **`list_price`**, **`completion_memory`**, plus category / progress / dates / cover / name. Entries store mood, notes, tags as **`tags_json`**, optional **`progress_at_entry`**, etc. Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`** for new columns.
+**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Game columns include **`user_rating`** (0–10 or NULL), **`completion_memory`**, **`journal_mode`**, favorites flags/rank, plus category / progress / dates / cover / name. A legacy **`list_price`** column may exist in older DBs but is **not** exposed or updated by the API. Entries store mood, notes, tags as **`tags_json`**, optional **`progress_at_entry`**, etc. Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`** for new columns.
 
 **Library API:** `server/library-routes.mjs` mounted at **`/api`** — `GET /library` (games + entries bootstrap), `GET|POST /api/games`, **`PATCH|DELETE /api/games/:igdbId`**, `GET|POST /api/entries`, **`PATCH|DELETE /api/entries/:id`**. **PATCH game rule:** if **`progress` reaches 100** while category is still **`recent` | `favorite` | `wishlist`**, server requires **`userRating`** in **1–10** (or rejects); on success it sets **`category: completed`** and **`completed_date`** when missing.
 
-**IGDB + pricing:** Same Express app. **`requireIgdb`** gates search/detail; missing Twitch env → **503** JSON **`{ error: 'igdb_not_configured', message }`** — server **warns** but **does not exit**. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (includes **`external_games`** from IGDB; **no MSRP in IGDB**), **`GET /api/igdb/health`**. When IGDB links a **Steam** app id, **`server/steam-store-price.mjs`** calls Valve’s public **`appdetails`** API (US region) for a live **`price_overview`** — still wired through the same **`igdb-proxy`** process. Search/detail field lists live in **`igdb-proxy.mjs`** (`IGDB_SEARCH_FIELDS`, `IGDB_DETAIL_FIELDS`).
+**IGDB:** Same Express app. **`requireIgdb`** gates search/detail; missing Twitch env → **503** JSON **`{ error: 'igdb_not_configured', message }`** — server **warns** but **does not exit**. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (includes **`external_games`** / store links from IGDB), **`GET /api/igdb/health`**. Search/detail field lists live in **`igdb-proxy.mjs`** (`IGDB_SEARCH_FIELDS`, `IGDB_DETAIL_FIELDS`).
 
 **Frontend integration:** Relative **`fetch('/api/...')`** — see **`src/api/library.ts`** (types **`LibraryGame`**, **`LibraryEntry`**, helpers and error parsing including proxy-misconfig hints). **`src/lib/libraryUi.ts`** maps API shapes ↔ UI cards. **`IgdbGameDetailModal`** opens from IGDB search selection: loads **`/api/igdb/game-details`**, supports add-to-library + open journal. **`CompletionSurveyModal`** (and related handlers in **`App`**) tie **completion + rating + memory** into **`PATCH /api/games`**. **`JournalPage`** consumes the same library/entry model.
 
@@ -82,7 +82,7 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 ### Data model (as implemented)
 
-- **Games (API camelCase):** `igdbId`, `name`, `coverUrl`, `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud`), `progress`, `hoursPlayed`, `lastPlayed`, `completedDate`, **`userRating`** (0–10), **`listPrice`**, **`completionMemory`**, `createdAt`, `updatedAt`.
+- **Games (API camelCase):** `igdbId`, `name`, `coverUrl`, `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud`), `progress`, `hoursPlayed`, `lastPlayed`, `completedDate`, **`userRating`** (0–10), **`completionMemory`**, **`journalMode`**, `isFavorite`, `favoriteRank`, `createdAt`, `updatedAt`.
 - **Journal entries:** `id` (string), `gameId`, title, area/boss/item, `screenshotUrl`, `notes`, `mood`, `sessionLength`, `progressAtEntry`, `tags[]`, `entryDate`, timestamps.
 - **“Recent” / tabs:** driven by **stored `category`** and UI filters over **`fetchLibrary()`**; align any future “smart recent” behavior with explicit rules in **`libraryUi`** / `App` and document there.
 
@@ -98,7 +98,7 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 ## IGDB search and game detail (implemented)
 
 - **`IgdbSearch`:** debounced search, portal dropdown; **`onSelect`** drives preview state (e.g. **`igdbPreview`** in `App`).
-- **`IgdbGameDetailModal`:** full-screen style modal — cover, year, summary (expandable), genres/platforms/screenshots, **IGDB store links**, and **Steam shelf price** (when IGDB provides a Steam id and Steam returns data), **add to library** (via **`POST /api/games`** / shared helpers), **open journal** for that game. Uses merged search row + detail payload (`IgdbGame` type extended for detail fields).
+- **`IgdbGameDetailModal`:** full-screen style modal — cover, year, summary (expandable), genres/platforms/screenshots, **IGDB store links**, **add to library** (via **`POST /api/games`** / shared helpers), **open journal** for that game. Uses merged search row + detail payload (`IgdbGame` type extended for detail fields).
 - **Optional enhancement:** surface **IGDB critic/aggregated ratings** in search or detail — would require adding fields to **`IGDB_DETAIL_FIELDS`** / **`IGDB_SEARCH_FIELDS`** and the simplified JSON shape in **`igdb-proxy.mjs`**.
 
 ## Grading and completion (partially implemented)
@@ -126,7 +126,7 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 |------|--------|
 | SQLite + `data/` gitignore + migrations pattern | Done |
 | Library + journal REST + `fetchLibrary` client | Done |
-| IGDB search, health, game-details, Steam price via IGDB Steam id | Done |
+| IGDB search, health, game-details | Done |
 | IGDB optional credentials (no exit) | Done |
 | Detail modal + add to library + journal from search | Done |
 | Completion + `userRating` / `completionMemory` + survey flow | Done |

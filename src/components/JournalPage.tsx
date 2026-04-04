@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Calendar, Clock, Star, Trophy, Plus, ChevronDown, ChevronUp, X, DollarSign } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Star, Trophy, Plus, ChevronDown, ChevronUp, X } from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
-import { apiEntryToJournalRow, formatListPriceUsd } from '../lib/libraryUi';
-import type { LibraryEntry } from '../api/library';
+import { apiEntryToJournalRow, journalFieldLabels } from '../lib/libraryUi';
+import type { JournalMode, LibraryEntry } from '../api/library';
 import type { UiGame } from '../lib/libraryUi';
 import { useCoverPalette } from '../hooks/useCoverPalette';
 
@@ -12,9 +12,16 @@ interface JournalPageProps {
   onBack: () => void;
   entries: LibraryEntry[];
   onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
+  onJournalModeChange?: (mode: JournalMode) => void | Promise<void>;
 }
 
-const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSaveEntry }) => {
+const JournalPage: React.FC<JournalPageProps> = ({
+  game,
+  onBack,
+  entries,
+  onSaveEntry,
+  onJournalModeChange,
+}) => {
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
@@ -26,6 +33,8 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
 
   const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
   const titleShadow = '0 1px 3px rgba(0,0,0,0.92), 0 0 20px rgba(0,0,0,0.4)';
+  const fieldLabels = journalFieldLabels(game.journalMode);
+  const sessionGame = game.journalMode === 'session';
 
   const toggleEntryExpansion = (entryId: string) => {
     setExpandedEntries(prev => {
@@ -91,6 +100,35 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                   </span>
                   <span className="text-muted-foreground font-normal"> Journal</span>
                 </h1>
+                {onJournalModeChange && game.category !== 'dud' && (
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">Journal</span>
+                    <div className="inline-flex rounded-lg border border-border/60 p-0.5 bg-muted/20">
+                      <button
+                        type="button"
+                        onClick={() => void onJournalModeChange('story')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium fast-transition ${
+                          !sessionGame
+                            ? 'bg-primary/25 text-primary border border-primary/40'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Story / SP
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onJournalModeChange('session')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium fast-transition ${
+                          sessionGame
+                            ? 'bg-accent/25 text-accent border border-accent/40'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        Session / MP
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
@@ -99,14 +137,13 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                   <span className="flex items-center gap-1">
                     <Star className="w-4 h-4" />
                     Progress: {game.progress}%
+                    {sessionGame && (
+                      <span className="text-muted-foreground/80 font-normal"> (optional for logs)</span>
+                    )}
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     Last played: {game.lastPlayed}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <DollarSign className="w-4 h-4" />
-                    Price: {formatListPriceUsd(game.listPrice)}
                   </span>
                 </div>
                 {game.category === 'completed' && (game.userRating != null || (game.completionMemory && game.completionMemory.trim())) && (
@@ -129,15 +166,15 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
             </div>
           </div>
 
-          {/* Progress Bar */}
-          {game.progress > 0 && (
+          {/* Progress bar — hidden for session-style games unless you already track a % */}
+          {!sessionGame && game.progress > 0 && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Story Progress</span>
                 <span className="readable-text">{game.progress}%</span>
               </div>
               <div className="w-full rounded-full h-2 overflow-hidden" style={coverPalette.trackStyle}>
-                <div 
+                <div
                   className="h-2 rounded-full smooth-transition relative"
                   style={{
                     width: `${game.progress}%`,
@@ -145,7 +182,7 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                     boxShadow: '0 2px 8px rgba(0,0,0,0.45)',
                   }}
                 >
-                  <div 
+                  <div
                     className="absolute inset-0 rounded-full"
                     style={{
                       background:
@@ -156,6 +193,12 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                 </div>
               </div>
             </div>
+          )}
+          {sessionGame && (
+            <p className="text-sm text-muted-foreground mt-2 max-w-2xl leading-relaxed">
+              Session log mode: new entries <span className="text-foreground">won’t update</span> story completion
+              from the journal. Use title, mood, notes, and the three optional fields for how you played.
+            </p>
           )}
         </div>
       </div>
@@ -251,24 +294,25 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                   </div>
                 </div>
                 
-                {/* Enhanced display for latest entry */}
-                {isLatest && entry.areaExplored && (
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                {/* Structured fields (labels follow current game journal mode) */}
+                {(isLatest || isExpanded) &&
+                  (entry.areaExplored || entry.bossDefeated || entry.itemFound) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     {entry.areaExplored && (
                       <div className="bg-muted/20 rounded-lg p-3 text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Area Explored</div>
+                        <div className="text-xs text-muted-foreground mb-1">{fieldLabels.area}</div>
                         <div className="text-sm text-secondary">{entry.areaExplored}</div>
                       </div>
                     )}
                     {entry.bossDefeated && (
                       <div className="bg-muted/20 rounded-lg p-3 text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Boss Defeated</div>
+                        <div className="text-xs text-muted-foreground mb-1">{fieldLabels.boss}</div>
                         <div className="text-sm text-destructive">{entry.bossDefeated}</div>
                       </div>
                     )}
                     {entry.itemFound && (
                       <div className="bg-muted/20 rounded-lg p-3 text-center">
-                        <div className="text-xs text-muted-foreground mb-1">Item Found</div>
+                        <div className="text-xs text-muted-foreground mb-1">{fieldLabels.item}</div>
                         <div className="text-sm text-accent">{entry.itemFound}</div>
                       </div>
                     )}

@@ -24,18 +24,6 @@ export type IgdbGame = {
     sourceName: string | null;
     sourceId: number | null;
   }[];
-  /** Live Steam shelf price when IGDB links a Steam app id (Valve appdetails, US region). */
-  steamPrice?: {
-    currency: string;
-    final: number;
-    initial: number;
-    discountPercent: number;
-    finalFormatted: string;
-    initialFormatted: string;
-  } | null;
-  /** From server: why steamPrice may be missing (IGDB has no MSRP). */
-  steamPriceHint?: "available" | "no_steam_link" | "steam_linked_no_price";
-  steamAppId?: number | null;
 
   // raw-IGDB
   first_release_date?: number;

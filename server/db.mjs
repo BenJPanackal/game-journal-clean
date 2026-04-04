@@ -11,8 +11,9 @@ const DB_PATH = path.join(DATA_DIR, 'journal.sqlite');
 const MIGRATION_VERSION = 1;
 
 const CATEGORIES = new Set(['recent', 'favorite', 'wishlist', 'completed', 'dud']);
+const JOURNAL_MODES = new Set(['story', 'session']);
 
-export { CATEGORIES, DB_PATH };
+export { CATEGORIES, DB_PATH, JOURNAL_MODES };
 
 function columnExists(db, table, col) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all();
@@ -102,6 +103,10 @@ function ensureSchema(db) {
     setRank.run(nextR, row.igdb_id);
     nextR += 1;
   }
+
+  if (!columnExists(db, 'games', 'journal_mode')) {
+    db.exec(`ALTER TABLE games ADD COLUMN journal_mode TEXT NOT NULL DEFAULT 'story'`);
+  }
 }
 
 export function openDatabase() {
@@ -126,10 +131,13 @@ export function rowToGame(row) {
     lastPlayed: row.last_played,
     completedDate: row.completed_date,
     userRating: row.user_rating,
-    listPrice: row.list_price != null && Number.isFinite(Number(row.list_price)) ? Number(row.list_price) : null,
     completionMemory: row.completion_memory != null ? String(row.completion_memory) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    journalMode:
+      row.journal_mode != null && JOURNAL_MODES.has(String(row.journal_mode))
+        ? String(row.journal_mode)
+        : 'story',
     isFavorite: Number(row.is_favorite) === 1,
     favoriteRank:
       row.favorite_rank != null && Number.isFinite(Number(row.favorite_rank))

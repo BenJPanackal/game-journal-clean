@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
+import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
 import IgdbGameDetailModal from './components/IgdbGameDetailModal';
@@ -7,11 +7,10 @@ import CompletionSurveyModal from './components/CompletionSurveyModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
 import { createEntry, fetchLibrary, patchGame, postGame } from './api/library';
-import type { LibraryEntry, LibraryGame } from './api/library';
+import type { JournalMode, LibraryEntry, LibraryGame } from './api/library';
 import {
   apiEntryToDashboard,
   apiGameToUiGame,
-  formatListPriceUsd,
   igdbToNewLibraryGame,
   type NewJournalEntryPayload,
   type UiGame,
@@ -118,10 +117,6 @@ const SidebarGameCard = ({
           {game.hoursPlayed > 0 && (
             <p className="text-xs text-secondary">{game.hoursPlayed}h</p>
           )}
-          <p className="text-xs text-accent flex items-center gap-1 mt-0.5">
-            <DollarSign className="w-3 h-3 flex-shrink-0" />
-            {formatListPriceUsd(game.listPrice)}
-          </p>
         </div>
       </div>
     </div>
@@ -201,10 +196,6 @@ const MainGameCard = ({
                     {game.hoursPlayed}h played
                   </span>
                 )}
-                <span className="flex items-center gap-1">
-                  <DollarSign className="w-4 h-4" />
-                  {formatListPriceUsd(game.listPrice)}
-                </span>
               </div>
             </div>
             
@@ -460,14 +451,18 @@ export default function App() {
     payload: NewJournalEntryPayload,
     completion?: { userRating: number; completionMemory: string | null }
   ): Promise<void | 'deferred'> => {
+    const isSessionGame = game.journalMode === 'session';
     const progress =
       completion != null
         ? 100
-        : payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
-          ? payload.progressAtEntry
-          : game.progress;
+        : isSessionGame
+          ? game.progress
+          : payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
+            ? payload.progressAtEntry
+            : game.progress;
 
     const inlineFinish =
+      !isSessionGame &&
       completion == null &&
       progress >= 100 &&
       !['completed', 'dud'].includes(game.category) &&
@@ -478,6 +473,7 @@ export default function App() {
 
     if (
       !completion &&
+      !isSessionGame &&
       progress >= 100 &&
       !['completed', 'dud'].includes(game.category) &&
       !inlineFinish
@@ -488,9 +484,8 @@ export default function App() {
     }
 
     const shouldSyncProgress =
-      completion != null ||
-      progress !== game.progress ||
-      (inlineFinish && progress >= 100);
+      !isSessionGame &&
+      (completion != null || progress !== game.progress || (inlineFinish && progress >= 100));
 
     const finishGamePayload =
       completion != null
@@ -663,6 +658,18 @@ export default function App() {
     return libraryEntries.filter((e) => e.gameId === selectedGame.id);
   }, [libraryEntries, selectedGame]);
 
+  const handleJournalModeChange = async (mode: JournalMode) => {
+    if (!selectedGame) return;
+    setLibraryError(null);
+    try {
+      const updated = await patchGame(selectedGame.id, { journalMode: mode });
+      setLibraryGames((prev) => mergeGame(prev, updated));
+      setSelectedGame(apiGameToUiGame(updated));
+    } catch (e) {
+      setLibraryError(e instanceof Error ? e.message : 'Could not update journal style');
+    }
+  };
+
   if (selectedGame) {
     return (
       <JournalPage
@@ -670,6 +677,7 @@ export default function App() {
         onBack={handleBackToMain}
         entries={entriesForSelectedGame}
         onSaveEntry={handleSaveJournalEntryForSelectedGame}
+        onJournalModeChange={handleJournalModeChange}
       />
     );
   }
@@ -1158,11 +1166,6 @@ export default function App() {
       <IgdbGameDetailModal
         game={igdbPreview}
         inLibrary={igdbPreview != null && libraryGames.some((x) => x.igdbId === igdbPreview.id)}
-        libraryListPrice={
-          igdbPreview
-            ? libraryGames.find((x) => x.igdbId === igdbPreview.id)?.listPrice ?? null
-            : null
-        }
         onClose={() => setIgdbPreview(null)}
         onAddToLibrary={addIgdbGameFromModal}
         onOpenJournal={openJournalFromIgdbPreview}

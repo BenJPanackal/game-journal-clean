@@ -8,7 +8,6 @@ import cors from 'cors';
 import axios from 'axios';
 import { openDatabase } from './db.mjs';
 import { createLibraryRouter } from './library-routes.mjs';
-import { fetchSteamStorePriceOverview } from './steam-store-price.mjs';
 
 const app = express();
 
@@ -101,19 +100,8 @@ function simplifyExternalGames(raw) {
     .filter((x) => x.url || x.uid);
 }
 
-function findSteamExternalGame(externalGames) {
-  for (const eg of externalGames) {
-    const n = (eg.sourceName || '').toLowerCase();
-    if (n.includes('steam') || eg.sourceId === 1) {
-      const uid = eg.uid != null ? String(eg.uid).trim() : '';
-      if (/^\d+$/.test(uid)) return { ...eg, steamAppId: Number(uid) };
-    }
-  }
-  return null;
-}
-
-/** Full card / detail modal — IGDB has no MSRP fields; we attach external store links + optional Steam live price. */
-function simplifyDetailGame(g, steamPrice = null) {
+/** Full card / detail modal — store links from IGDB external_games. */
+function simplifyDetailGame(g) {
   const genres = Array.isArray(g.genres)
     ? g.genres.map((x) => x?.name).filter(Boolean)
     : [];
@@ -127,11 +115,6 @@ function simplifyDetailGame(g, steamPrice = null) {
         .filter(Boolean)
     : [];
   const externalGames = simplifyExternalGames(g.external_games);
-  const steamEg = findSteamExternalGame(externalGames);
-  const steamAppId = steamEg?.steamAppId ?? null;
-  /** IGDB has no dollar fields; price only when Steam linked + Valve returns price_overview (US). */
-  const steamPriceHint =
-    steamPrice != null ? 'available' : steamAppId != null ? 'steam_linked_no_price' : 'no_steam_link';
   return {
     ...simplifySearchGame(g),
     summary: g.summary ?? null,
@@ -139,9 +122,6 @@ function simplifyDetailGame(g, steamPrice = null) {
     platforms,
     screenshotUrls,
     externalGames,
-    steamPrice,
-    steamPriceHint,
-    steamAppId,
   };
 }
 
@@ -257,7 +237,7 @@ async function handleSearch(req, res) {
 app.post('/api/igdb/search', requireIgdb, handleSearch);
 app.post('/api/igdb/games/search', requireIgdb, handleSearch);
 
-/** One game by IGDB id — genres, platforms, screenshots, external store links, optional Steam price (via Steam app id from IGDB). */
+/** One game by IGDB id — genres, platforms, screenshots, external store links. */
 app.post('/api/igdb/game-details', requireIgdb, async (req, res) => {
   const id = Number(req.body?.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -281,13 +261,7 @@ limit 1;`,
     );
     const row = igdbRes.data?.[0];
     if (!row) return res.status(404).json({ error: 'Game not found' });
-    const externalGames = simplifyExternalGames(row.external_games);
-    const steamEg = findSteamExternalGame(externalGames);
-    let steamPrice = null;
-    if (steamEg?.steamAppId) {
-      steamPrice = await fetchSteamStorePriceOverview(steamEg.steamAppId);
-    }
-    res.json({ game: simplifyDetailGame(row, steamPrice) });
+    res.json({ game: simplifyDetailGame(row) });
   } catch (err) {
     const status = err?.response?.status || 500;
     const data = err?.response?.data || err.message;

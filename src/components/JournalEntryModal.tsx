@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, Image, Trophy, MapPin, Sword, FileText, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import {
+  X,
+  Save,
+  Image,
+  Trophy,
+  MapPin,
+  Sword,
+  FileText,
+  Clock,
+  TrendingUp,
+  AlertTriangle,
+  Users,
+  LayoutList,
+  Sparkles,
+} from 'lucide-react';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
+import { journalFieldLabels } from '../lib/libraryUi';
 import type { UiGame } from '../lib/libraryUi';
 
 interface JournalEntryModalProps {
@@ -40,7 +55,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
     setCompletionRating(8);
     setCompletionMemory('');
     setCompletionError('');
-  }, [isOpen, game?.id, game?.progress]);
+  }, [isOpen, game?.id, game?.progress, game?.journalMode]);
 
   // Ordered from happy to unhappy with neutral in middle - Fixed neutral color
   const moods = [
@@ -79,6 +94,9 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
     setEntryData(prev => ({ ...prev, progress: value }));
   };
 
+  const sessionGame = game != null && game.journalMode === 'session';
+  const labels = journalFieldLabels(game?.journalMode);
+
   const effectiveProgress =
     entryData.progress === ''
       ? gameProgress
@@ -88,6 +106,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
       ? gameProgress
       : effectiveProgress;
   const needsCompletionSurvey =
+    !sessionGame &&
     parsedProgress >= 100 &&
     game != null &&
     !['completed', 'dud'].includes(game.category);
@@ -107,7 +126,11 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
     const progressNum = entryData.progress === '' ? null : parseFloat(entryData.progress);
     const progressAtEntry =
-      progressNum != null && !Number.isNaN(progressNum) ? progressNum : gameProgress;
+      sessionGame
+        ? null
+        : progressNum != null && !Number.isNaN(progressNum)
+          ? progressNum
+          : gameProgress;
     const payload: NewJournalEntryPayload = {
       title: entryData.title.trim(),
       entryDate: new Date().toISOString(),
@@ -221,6 +244,11 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                   New Journal Entry
                 </h2>
                 <p className="text-muted-foreground">{game.title}</p>
+                <p className="text-xs text-muted-foreground/90 mt-1">
+                  {sessionGame
+                    ? 'Session log — optional fields for multiplayer / live games'
+                    : 'Story-style entry — areas, bosses, and progress'}
+                </p>
               </div>
             </div>
             <button
@@ -244,13 +272,17 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               type="text"
               value={entryData.title}
               onChange={(e) => setEntryData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="Epic boss fight, story revelation, etc..."
+              placeholder={
+                sessionGame
+                  ? 'Ranked night, ARAM with friends, event queue…'
+                  : 'Epic boss fight, story revelation, etc...'
+              }
               className="w-full px-4 py-3 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
             />
           </div>
 
           {/* Session Info and Progress */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className={`grid gap-4 ${sessionGame ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'}`}>
             <div className="space-y-2">
               <label className="block text-sm readable-text">
                 <Clock className="w-4 h-4 inline mr-2" />
@@ -264,39 +296,42 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                 className="w-full px-4 py-3 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
               />
             </div>
-            <div className="space-y-2">
-              <label className="block text-sm readable-text">
-                <TrendingUp className="w-4 h-4 inline mr-2" />
-                Progress %
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={entryData.progress}
-                onChange={(e) => handleProgressChange(e.target.value)}
-                placeholder={String(gameProgress)}
-                className={`vaporwave-number-input w-full px-4 py-3 bg-input/50 border rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition ${
-                  progressError ? 'progress-error' : 'border-border/50'
-                }`}
-              />
-              {progressError && (
-                <div className="flex items-center gap-1 progress-error-text">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>{progressError}</span>
+            {!sessionGame && (
+              <div className="space-y-2">
+                <label className="block text-sm readable-text">
+                  <TrendingUp className="w-4 h-4 inline mr-2" />
+                  Progress %
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={entryData.progress}
+                  onChange={(e) => handleProgressChange(e.target.value)}
+                  placeholder={String(gameProgress)}
+                  className={`vaporwave-number-input w-full px-4 py-3 bg-input/50 border rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition ${
+                    progressError ? 'progress-error' : 'border-border/50'
+                  }`}
+                />
+                {progressError && (
+                  <div className="flex items-center gap-1 progress-error-text">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>{progressError}</span>
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  Current: {gameProgress}%
                 </div>
-              )}
-              <div className="text-xs text-muted-foreground">
-                Current: {gameProgress}%
               </div>
-            </div>
+            )}
             <div className="space-y-2">
               <label className="block text-sm readable-text">Mood (Happy → Unhappy)</label>
               <div className="flex flex-wrap gap-1">
                 {moods.map(mood => (
                   <button
                     key={mood.id}
+                    type="button"
                     onClick={() => {
                       console.log('😊 Mood selected:', mood.label);
                       setEntryData(prev => ({ ...prev, mood: mood.id }));
@@ -370,44 +405,62 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
             </div>
           )}
 
-          {/* Segmented Input Blocks */}
+          {/* Structured fields (story vs session labels; same persisted columns) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="block text-sm readable-text">
-                <MapPin className="w-4 h-4 inline mr-2" />
-                Area Explored
+                {sessionGame ? (
+                  <Users className="w-4 h-4 inline mr-2" />
+                ) : (
+                  <MapPin className="w-4 h-4 inline mr-2" />
+                )}
+                {labels.area}
               </label>
               <input
                 type="text"
                 value={entryData.areaExplored}
                 onChange={(e) => setEntryData(prev => ({ ...prev, areaExplored: e.target.value }))}
-                placeholder="Night City Downtown"
+                placeholder={
+                  sessionGame ? 'Jinx, Sage, your main…' : 'Night City Downtown'
+                }
                 className="w-full px-3 py-2 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-sm readable-text">
-                <Sword className="w-4 h-4 inline mr-2" />
-                Boss Defeated
+                {sessionGame ? (
+                  <LayoutList className="w-4 h-4 inline mr-2" />
+                ) : (
+                  <Sword className="w-4 h-4 inline mr-2" />
+                )}
+                {labels.boss}
               </label>
               <input
                 type="text"
                 value={entryData.bossDefeated}
                 onChange={(e) => setEntryData(prev => ({ ...prev, bossDefeated: e.target.value }))}
-                placeholder="Adam Smasher"
+                placeholder={
+                  sessionGame ? 'Ranked solo, ARAM, Fortnite ZB…' : 'Adam Smasher'
+                }
                 className="w-full px-3 py-2 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
               />
             </div>
             <div className="space-y-2">
               <label className="block text-sm readable-text">
-                <Trophy className="w-4 h-4 inline mr-2" />
-                Item Found
+                {sessionGame ? (
+                  <Sparkles className="w-4 h-4 inline mr-2" />
+                ) : (
+                  <Trophy className="w-4 h-4 inline mr-2" />
+                )}
+                {labels.item}
               </label>
               <input
                 type="text"
                 value={entryData.itemFound}
                 onChange={(e) => setEntryData(prev => ({ ...prev, itemFound: e.target.value }))}
-                placeholder="Legendary Katana"
+                placeholder={
+                  sessionGame ? 'Penta, clutch round, funny moment…' : 'Legendary Katana'
+                }
                 className="w-full px-3 py-2 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
               />
             </div>
@@ -448,9 +501,13 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              {commonTags.map(tag => (
+              {(sessionGame
+                ? ['Ranked', 'Casual', 'Event night', 'Clutch win', 'Rough session', 'Learned something']
+                : commonTags
+              ).map((tag) => (
                 <button
                   key={tag}
+                  type="button"
                   onClick={() => addTag(tag)}
                   className="px-2 py-1 bg-muted/20 text-muted-foreground rounded-full text-xs hover:bg-primary/20 hover:text-primary fast-transition"
                 >
@@ -477,7 +534,11 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
             <textarea
               value={entryData.notes}
               onChange={(e) => setEntryData(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder="Write about your experience, thoughts, memorable moments..."
+              placeholder={
+                sessionGame
+                  ? 'How did the session feel? Anything you want to remember about today’s games?'
+                  : 'Write about your experience, thoughts, memorable moments...'
+              }
               rows={6}
               className="w-full px-4 py-3 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition resize-none"
             />
