@@ -86,7 +86,10 @@ export function igdbReleaseYear(g: IgdbGame): number | undefined {
 }
 
 /** Build POST /api/games body when adding from IGDB (new library row). */
-export function igdbToNewLibraryGame(g: IgdbGame): {
+export function igdbToNewLibraryGame(
+  g: IgdbGame,
+  options?: { journalMode?: JournalMode }
+): {
   igdbId: number;
   name: string;
   coverUrl: string | null;
@@ -94,6 +97,7 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
   /** Shows under Recent; user can move to List or Favorites from the sidebar */
   category: 'recent';
   progress: number;
+  journalMode?: JournalMode;
 } {
   const year = igdbReleaseYear(g);
   return {
@@ -103,6 +107,7 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
     releaseYear: year != null ? year : null,
     category: 'recent',
     progress: 0,
+    ...(options?.journalMode != null ? { journalMode: options.journalMode } : {}),
   };
 }
 

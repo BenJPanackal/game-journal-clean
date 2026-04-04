@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { X, BookOpen, Library } from 'lucide-react';
 import type { IgdbGame } from './IgdbSearch';
+import type { JournalMode } from '../api/library';
 
 type Props = {
   game: IgdbGame | null;
   inLibrary: boolean;
   onClose: () => void;
   /** Receives the richest game object we have (merged IGDB detail + search row) for POST /api/games */
-  onAddToLibrary: (g: IgdbGame) => void | Promise<void>;
+  onAddToLibrary: (g: IgdbGame, options?: { journalMode: JournalMode }) => void | Promise<void>;
   onOpenJournal: () => void;
 };
 
@@ -23,12 +24,14 @@ export default function IgdbGameDetailModal({
   const [remote, setRemote] = useState<IgdbGame | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailErr, setDetailErr] = useState<string | null>(null);
+  const [addJournalMode, setAddJournalMode] = useState<JournalMode>('story');
 
   useEffect(() => {
     setSummaryExpanded(false);
     setAdding(false);
     setRemote(null);
     setDetailErr(null);
+    setAddJournalMode('story');
   }, [game?.id]);
 
   useEffect(() => {
@@ -244,6 +247,42 @@ export default function IgdbGameDetailModal({
             </p>
           )}
 
+          {!inLibrary && (
+            <div className="rounded-lg border border-border/50 bg-muted/15 p-3 space-y-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                How will you journal this?
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAddJournalMode('story')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium border fast-transition ${
+                    addJournalMode === 'story'
+                      ? 'bg-primary/20 text-primary border-primary/50'
+                      : 'border-transparent text-muted-foreground hover:bg-muted/40'
+                  }`}
+                >
+                  Story / single-player
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddJournalMode('session')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium border fast-transition ${
+                    addJournalMode === 'session'
+                      ? 'bg-accent/20 text-accent border-accent/50'
+                      : 'border-transparent text-muted-foreground hover:bg-muted/40'
+                  }`}
+                >
+                  Multiplayer / live
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Story: areas, bosses, and completion progress. Multiplayer: session-style log (Fortnite,
+                League, etc.) — entries won’t drive a story progress bar.
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3 pt-2 border-t border-border/40">
             {inLibrary ? (
               <button
@@ -265,7 +304,7 @@ export default function IgdbGameDetailModal({
                   void (async () => {
                     setAdding(true);
                     try {
-                      await onAddToLibrary(merged);
+                      await onAddToLibrary(merged, { journalMode: addJournalMode });
                       onClose();
                     } finally {
                       setAdding(false);

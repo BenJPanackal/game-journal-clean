@@ -428,9 +428,9 @@ export default function App() {
     setIgdbPreview(g);
   };
 
-  const addIgdbGameFromModal = async (g: IgdbGame) => {
+  const addIgdbGameFromModal = async (g: IgdbGame, opts?: { journalMode: JournalMode }) => {
     try {
-      const saved = await postGame(igdbToNewLibraryGame(g));
+      const saved = await postGame(igdbToNewLibraryGame(g, opts));
       setLibraryGames((prev) => mergeGame(prev, saved));
       handleGameClick(apiGameToUiGame(saved));
     } catch (e) {

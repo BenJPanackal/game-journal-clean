@@ -112,8 +112,7 @@ function hueFromAcc(cosSum: number, sinSum: number, w: number): number | null {
 }
 
 /**
- * Weight for “this pixel should influence the palette”. Zeros out blacks, whites, and grays
- * so gradients follow *chromatic* mass (Spotify-style), not silhouette/mud.
+ * Lenient weight — used only to measure “is this cover mostly grey/black?” (coverage probe).
  */
 function chromaticWeight(r: number, g: number, b: number, a: number): number {
   if (a < 40) return 0;
@@ -130,6 +129,123 @@ function chromaticWeight(r: number, g: number, b: number, a: number): number {
   const satBoost = sat * sat;
   const midTone = 1 - Math.min(1, Math.abs(lum - 0.36) * 2.2);
   return satBoost * (a / 255) * (0.28 + 0.72 * midTone);
+}
+
+/**
+ * Stricter weight for colorful covers — drops greys, near-blacks, and dark muddy browns so
+ * progress gradients follow real color, not silhouette noise.
+ */
+function chromaticWeightVibrant(r: number, g: number, b: number, a: number): number {
+  if (a < 40) return 0;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max < 48) return 0;
+  if (min > 248) return 0;
+  const spread = max - min;
+  const sat = max < 1e-6 ? 0 : spread / max;
+  if (sat < 0.175) return 0;
+  if (spread < 24 && sat < 0.32) return 0;
+  const lum = relLum(r, g, b);
+  if (lum > 0.92) return 0;
+  // Dark near-grey / black regions with weak tint
+  if (lum < 0.2 && sat < 0.55) return 0;
+  if (lum < 0.28 && sat < 0.28) return 0;
+  const satBoost = sat * sat;
+  const midTone = 1 - Math.min(1, Math.abs(lum - 0.38) * 2.0);
+  return satBoost * (a / 255) * (0.22 + 0.78 * midTone);
+}
+
+/** True when too few pixels read as chromatic — then we should lean on neutral greys from the art. */
+function isPrimarilyAchromaticCover(data: Uint8ClampedArray, w: number, h: number): boolean {
+  let opaque = 0;
+  let chromatic = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const a = data[i + 3];
+      if (a < 40) continue;
+      opaque++;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      if (chromaticWeight(r, g, b, a) > 0) chromatic++;
+    }
+  }
+  if (opaque < 20) return true;
+  return chromatic / opaque < 0.06;
+}
+
+type RgbAcc = { r: number; g: number; b: number; w: number };
+
+function emptyRgbAcc(): RgbAcc {
+  return { r: 0, g: 0, b: 0, w: 0 };
+}
+
+function addRgb(acc: RgbAcc, r: number, g: number, b: number, wt: number) {
+  acc.r += r * wt;
+  acc.g += g * wt;
+  acc.b += b * wt;
+  acc.w += wt;
+}
+
+function meanRgb(acc: RgbAcc): { r: number; g: number; b: number } | null {
+  if (acc.w < 1e-6) return null;
+  return { r: acc.r / acc.w, g: acc.g / acc.w, b: acc.b / acc.w };
+}
+
+/** Greyscale / near-monochrome covers: gradient from the actual art (no random theme colors). */
+function buildNeutralPaletteFromCover(data: Uint8ClampedArray, w: number, h: number): CoverPalette | null {
+  const global = emptyRgbAcc();
+  const left = emptyRgbAcc();
+  const center = emptyRgbAcc();
+  const right = emptyRgbAcc();
+  const xThird = w / 3;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const a = data[i + 3];
+      if (a < 40) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const wt = a / 255;
+      addRgb(global, r, g, b, wt);
+      if (x < xThird) addRgb(left, r, g, b, wt);
+      else if (x < 2 * xThird) addRgb(center, r, g, b, wt);
+      else addRgb(right, r, g, b, wt);
+    }
+  }
+  const gMean = meanRgb(global);
+  const lMean = meanRgb(left);
+  const rMean = meanRgb(right);
+  if (!gMean || !lMean || !rMean) return null;
+
+  const hl = rgbToHsl(lMean.r, lMean.g, lMean.b);
+  const hm = rgbToHsl(gMean.r, gMean.g, gMean.b);
+  const hr = rgbToHsl(rMean.r, rMean.g, rMean.b);
+  const sAvg = (hl.s + hm.s + hr.s) / 3;
+  let hLeft = hl.h;
+  let hMid = lerpHue(hl.h, hr.h, 0.5);
+  let hRight = hr.h;
+  let satBase = Math.min(0.42, Math.max(0.1, sAvg * 2.2 + 0.1));
+  if (sAvg < 0.055) {
+    hLeft = lerpHue(265, hMid, 0.15);
+    hMid = 265;
+    hRight = lerpHue(255, hMid, 0.12);
+    satBase = 0.14;
+  }
+
+  const leftStop = hslToRgb(hLeft, Math.min(0.55, satBase * 1.1), 0.73);
+  const midStop = hslToRgb(hMid, Math.min(0.5, satBase * 1.05), 0.48);
+  const rightStop = hslToRgb(hRight, Math.min(0.48, satBase * 0.95), 0.31);
+
+  const progressGradient = `linear-gradient(90deg, ${rgbCss(leftStop)} 0%, ${rgbCss(midStop)} 45%, ${rgbCss(rightStop)} 100%)`;
+  const titleSrc = titleColorForDarkUi(gMean.r, gMean.g, gMean.b);
+  return {
+    titleColor: rgbCss(titleSrc),
+    progressGradient,
+    trackStyle: trackStyleFromHsl(hMid, satBase, 0.16),
+  };
 }
 
 type ChromaticAcc = {
@@ -175,7 +291,8 @@ function scanChromaticRegions(
   data: Uint8ClampedArray,
   w: number,
   h: number,
-  minSat: number
+  minSat: number,
+  weightFn: (r: number, g: number, b: number, a: number) => number
 ): { global: ChromaticAcc; left: ChromaticAcc; center: ChromaticAcc; right: ChromaticAcc } {
   const global = emptyAcc();
   const left = emptyAcc();
@@ -190,7 +307,7 @@ function scanChromaticRegions(
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      let wt = chromaticWeight(r, g, b, a);
+      let wt = weightFn(r, g, b, a);
       if (wt <= 0) continue;
       const { s } = rgbToHsl(r, g, b);
       if (s < minSat) continue;
@@ -343,23 +460,34 @@ export function getCoverPalette(coverUrl: string): Promise<CoverPalette | null> 
         ctx.drawImage(img, 0, 0, w, h);
         const { data } = ctx.getImageData(0, 0, w, h);
 
-        let minSat = 0.13;
-        let regions = scanChromaticRegions(data, w, h, minSat);
-        if (regions.global.w < 80) {
-          minSat = 0.085;
-          regions = scanChromaticRegions(data, w, h, minSat);
-        }
-        if (regions.global.w < 40) {
-          minSat = 0.055;
-          regions = scanChromaticRegions(data, w, h, minSat);
+        if (isPrimarilyAchromaticCover(data, w, h)) {
+          const neutral = buildNeutralPaletteFromCover(data, w, h);
+          done(neutral);
+          return;
         }
 
-        const palette = buildVibrantPalette(
-          regions.global,
-          regions.left,
-          regions.center,
-          regions.right
-        );
+        let palette: CoverPalette | null = null;
+        let minSat = 0.15;
+        let regions = scanChromaticRegions(data, w, h, minSat, chromaticWeightVibrant);
+        palette = buildVibrantPalette(regions.global, regions.left, regions.center, regions.right);
+        if (!palette || regions.global.w < 90) {
+          minSat = 0.12;
+          regions = scanChromaticRegions(data, w, h, minSat, chromaticWeightVibrant);
+          palette = buildVibrantPalette(regions.global, regions.left, regions.center, regions.right);
+        }
+        if (!palette || regions.global.w < 55) {
+          minSat = 0.1;
+          regions = scanChromaticRegions(data, w, h, minSat, chromaticWeightVibrant);
+          palette = buildVibrantPalette(regions.global, regions.left, regions.center, regions.right);
+        }
+        if (!palette || regions.global.w < 40) {
+          minSat = 0.12;
+          regions = scanChromaticRegions(data, w, h, minSat, chromaticWeight);
+          palette = buildVibrantPalette(regions.global, regions.left, regions.center, regions.right);
+        }
+        if (!palette) {
+          palette = buildNeutralPaletteFromCover(data, w, h);
+        }
         done(palette);
       } catch {
         done(null);
