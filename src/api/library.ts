@@ -15,6 +15,8 @@ export type LibraryGame = {
   userRating: number | null;
   /** Typical retail / list price in USD (nullable until set via API or future store integration). */
   listPrice: number | null;
+  /** Final thoughts saved when marking complete via journal survey. */
+  completionMemory: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -120,6 +122,7 @@ export async function patchGame(
     completedDate: string | null;
     userRating: number | null;
     listPrice: number | null;
+    completionMemory: string | null;
   }>
 ): Promise<LibraryGame> {
   const res = await fetch(`/api/games/${igdbId}`, {
@@ -147,6 +150,11 @@ export type PostEntryBody = {
   tags?: string[];
   /** When set, updates library game progress in the same DB transaction (one round-trip). */
   syncGameProgress?: number | null;
+  /** Required when syncGameProgress is 100 and the game is not already completed (journal completion flow). */
+  finishGame?: {
+    userRating: number;
+    completionMemory?: string | null;
+  };
 };
 
 export async function createEntry(

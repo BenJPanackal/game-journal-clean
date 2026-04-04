@@ -288,7 +288,7 @@ export default function IgdbGameDetailModal({
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 fast-transition disabled:opacity-50"
               >
                 <Library className="w-4 h-4" />
-                {adding ? 'Adding…' : 'Add to library (wishlist)'}
+                {adding ? 'Adding…' : 'Add to library (Recent)'}
               </button>
             )}
             <button

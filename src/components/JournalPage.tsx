@@ -10,7 +10,7 @@ interface JournalPageProps {
   game: UiGame;
   onBack: () => void;
   entries: LibraryEntry[];
-  onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void>;
+  onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
 }
 
 const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSaveEntry }) => {
@@ -83,7 +83,7 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                 <h1 className="text-3xl readable-accent mb-2" style={{ color: game.colors.primary }}>
                   {game.title} Journal
                 </h1>
-                <div className="flex items-center gap-6 text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
                     {game.hoursPlayed}h played
@@ -101,6 +101,22 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                     Price: {formatListPriceUsd(game.listPrice)}
                   </span>
                 </div>
+                {game.category === 'completed' && (game.userRating != null || (game.completionMemory && game.completionMemory.trim())) && (
+                  <div className="mt-4 p-4 rounded-lg border border-primary/25 bg-primary/5 max-w-2xl">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Completion recap</p>
+                    {game.userRating != null && (
+                      <p className="text-sm readable-text">
+                        Your rating:{' '}
+                        <span className="text-primary font-semibold">{game.userRating}/10</span>
+                      </p>
+                    )}
+                    {game.completionMemory?.trim() && (
+                      <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap leading-relaxed">
+                        {game.completionMemory}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

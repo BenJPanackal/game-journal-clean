@@ -3,9 +3,10 @@ import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, M
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
 import IgdbGameDetailModal from './components/IgdbGameDetailModal';
+import CompletionSurveyModal from './components/CompletionSurveyModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
-import { createEntry, fetchLibrary, postGame } from './api/library';
+import { createEntry, fetchLibrary, patchGame, postGame } from './api/library';
 import type { LibraryEntry, LibraryGame } from './api/library';
 import {
   apiEntryToDashboard,
@@ -17,7 +18,17 @@ import {
 } from './lib/libraryUi';
 
 
-const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) => (
+const SidebarGameCard = ({
+  game,
+  onClick,
+  showFavoriteToggle,
+  onToggleFavorite,
+}: {
+  game: UiGame;
+  onClick: () => void;
+  showFavoriteToggle: boolean;
+  onToggleFavorite: (game: UiGame) => void;
+}) => (
   <div 
     onClick={() => {
       console.log('🎮 Sidebar game clicked:', game.title);
@@ -50,13 +61,34 @@ const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) 
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between mb-1">
-            <h4 className="text-xs truncate readable-accent" style={{ color: game.colors.primary }}>
+          <div className="flex items-start justify-between mb-1 gap-1">
+            <h4 className="text-xs truncate readable-accent min-w-0" style={{ color: game.colors.primary }}>
               {game.title}
             </h4>
-            <div className="flex items-center gap-1">
-              {game.category === 'favorite' && (
-                <Heart className="w-3 h-3 text-destructive fill-destructive flex-shrink-0" />
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {showFavoriteToggle ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(game);
+                  }}
+                  className="p-0.5 rounded hover:bg-destructive/15"
+                  title={game.category === 'favorite' ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-label={game.category === 'favorite' ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart
+                    className={`w-3 h-3 ${
+                      game.category === 'favorite'
+                        ? 'text-destructive fill-destructive'
+                        : 'text-muted-foreground'
+                    }`}
+                  />
+                </button>
+              ) : (
+                game.category === 'favorite' && (
+                  <Heart className="w-3 h-3 text-destructive fill-destructive" />
+                )
               )}
             </div>
           </div>
@@ -86,7 +118,17 @@ const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) 
   </div>
 );
 
-const MainGameCard = ({ game, onClick, isLargest = false }: { game: any; onClick: () => void; isLargest?: boolean }) => {
+const MainGameCard = ({
+  game,
+  onClick,
+  isLargest = false,
+  onToggleFavorite,
+}: {
+  game: UiGame;
+  onClick: () => void;
+  isLargest?: boolean;
+  onToggleFavorite?: (game: UiGame) => void;
+}) => {
   const progressGradient = game.progress > 0 ? 
     (game.progress === 100 ? 'linear-gradient(90deg, #22C55E, #16A34A)' : `linear-gradient(90deg, ${game.colors.primary}, ${game.colors.secondary})`) : 
     'none';
@@ -153,9 +195,25 @@ const MainGameCard = ({ game, onClick, isLargest = false }: { game: any; onClick
               </div>
             </div>
             
-            {game.category === 'favorite' && (
-              <Heart className="w-6 h-6 text-destructive fill-destructive flex-shrink-0 ml-4" />
-            )}
+            <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+              {onToggleFavorite && !['completed', 'dud'].includes(game.category) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(game);
+                  }}
+                  className="text-xs px-2 py-1 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 fast-transition whitespace-nowrap"
+                >
+                  <Heart
+                    className={`w-3 h-3 inline mr-1 align-middle ${
+                      game.category === 'favorite' ? 'fill-destructive' : ''
+                    }`}
+                  />
+                  {game.category === 'favorite' ? 'Unfavorite' : 'Favorite'}
+                </button>
+              )}
+            </div>
           </div>
           
           {game.progress > 0 && (
@@ -185,10 +243,16 @@ const MainGameCard = ({ game, onClick, isLargest = false }: { game: any; onClick
             </div>
           )}
           
-          {game.progress === 0 && (
+          {game.progress === 0 && ['recent', 'wishlist', 'favorite'].includes(game.category) && (
             <div className="flex items-center gap-2 mt-4">
               <Bookmark className="w-5 h-5 text-accent" />
-              <span className="text-accent">On Wishlist</span>
+              <span className="text-accent">
+                {game.category === 'wishlist'
+                  ? 'On your list'
+                  : game.category === 'favorite'
+                    ? 'Favorite — not started'
+                    : 'Recently added'}
+              </span>
             </div>
           )}
         </div>
@@ -227,6 +291,11 @@ export default function App() {
   const [entryExpanded, setEntryExpanded] = useState(false);
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
   const [igdbPreview, setIgdbPreview] = useState<IgdbGame | null>(null);
+  const [completionSurveyOpen, setCompletionSurveyOpen] = useState(false);
+  const [completionDraft, setCompletionDraft] = useState<{
+    game: UiGame;
+    payload: NewJournalEntryPayload;
+  } | null>(null);
 
   const gameTitleById = useMemo(() => {
     const m = new Map<number, string>();
@@ -331,12 +400,55 @@ export default function App() {
     if (row) handleGameClick(apiGameToUiGame(row));
   };
 
-  const persistJournalEntry = async (game: UiGame, payload: NewJournalEntryPayload) => {
+  const persistJournalEntry = async (
+    game: UiGame,
+    payload: NewJournalEntryPayload,
+    completion?: { userRating: number; completionMemory: string | null }
+  ): Promise<void | 'deferred'> => {
     const progress =
-      payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
-        ? payload.progressAtEntry
-        : game.progress;
-    const shouldSyncProgress = progress !== game.progress;
+      completion != null
+        ? 100
+        : payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
+          ? payload.progressAtEntry
+          : game.progress;
+
+    const inlineFinish =
+      completion == null &&
+      progress >= 100 &&
+      !['completed', 'dud'].includes(game.category) &&
+      payload.finishGame != null &&
+      Number.isFinite(payload.finishGame.userRating) &&
+      payload.finishGame.userRating >= 1 &&
+      payload.finishGame.userRating <= 10;
+
+    if (
+      !completion &&
+      progress >= 100 &&
+      !['completed', 'dud'].includes(game.category) &&
+      !inlineFinish
+    ) {
+      setCompletionDraft({ game, payload });
+      setCompletionSurveyOpen(true);
+      return 'deferred';
+    }
+
+    const shouldSyncProgress =
+      completion != null ||
+      progress !== game.progress ||
+      (inlineFinish && progress >= 100);
+
+    const finishGamePayload =
+      completion != null
+        ? {
+            userRating: completion.userRating,
+            completionMemory: completion.completionMemory,
+          }
+        : inlineFinish
+          ? {
+              userRating: payload.finishGame!.userRating,
+              completionMemory: payload.finishGame!.completionMemory ?? null,
+            }
+          : undefined;
 
     const { entry, game: updatedGame } = await createEntry({
       gameId: game.id,
@@ -352,6 +464,7 @@ export default function App() {
       progressAtEntry: payload.progressAtEntry,
       tags: payload.tags,
       syncGameProgress: shouldSyncProgress ? progress : undefined,
+      finishGame: finishGamePayload,
     });
     setLibraryEntries((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
 
@@ -363,18 +476,58 @@ export default function App() {
 
   const handleSaveJournalEntryFromDashboard = async (payload: NewJournalEntryPayload) => {
     const recent = getRecentGames()[0];
+    const listPick = libraryGames.find((g) => g.category === 'wishlist');
+    const inProgressPick = libraryGames.find((g) =>
+      ['recent', 'favorite', 'wishlist'].includes(g.category)
+    );
     const fallback = libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null;
-    const target = recent ?? fallback;
+    const target =
+      recent ?? (listPick ? apiGameToUiGame(listPick) : null) ?? (inProgressPick ? apiGameToUiGame(inProgressPick) : null) ?? fallback;
     if (!target) {
       setLibraryError('Add a game to your library before creating an entry.');
       return;
     }
-    await persistJournalEntry(target, payload);
+    return persistJournalEntry(target, payload);
   };
 
   const handleSaveJournalEntryForSelectedGame = async (payload: NewJournalEntryPayload) => {
     if (!selectedGame) return;
-    await persistJournalEntry(selectedGame, payload);
+    return persistJournalEntry(selectedGame, payload);
+  };
+
+  const handleCompletionSurveyConfirm = async (data: {
+    userRating: number;
+    completionMemory: string | null;
+  }) => {
+    if (!completionDraft) return;
+    const { game, payload } = completionDraft;
+    setCompletionDraft(null);
+    setCompletionSurveyOpen(false);
+    setLibraryError(null);
+    try {
+      await persistJournalEntry(game, payload, data);
+    } catch (e) {
+      setLibraryError(e instanceof Error ? e.message : 'Could not save completion');
+    }
+  };
+
+  const handleCompletionSurveyCancel = () => {
+    setCompletionDraft(null);
+    setCompletionSurveyOpen(false);
+    setLibraryError('Completion cancelled — that journal entry was not saved.');
+  };
+
+  const handleToggleFavorite = async (g: UiGame) => {
+    if (['completed', 'dud'].includes(g.category)) return;
+    setLibraryError(null);
+    try {
+      const nextCat = g.category === 'favorite' ? 'recent' : 'favorite';
+      const updated = await patchGame(g.id, { category: nextCat });
+      setLibraryGames((prev) => mergeGame(prev, updated));
+      setSelectedGame((sg) => (sg?.id === g.id ? apiGameToUiGame(updated) : sg));
+    } catch (e) {
+      setLibraryError(e instanceof Error ? e.message : 'Could not update favorites');
+    }
   };
 
   const sortedDashboardEntries = useMemo(
@@ -430,8 +583,6 @@ export default function App() {
   useEffect(() => {
     if (activeCategory === 'completed') {
       setActiveTab('completed');
-    } else {
-      setActiveTab('recent');
     }
   }, [activeCategory]);
 
@@ -580,7 +731,7 @@ export default function App() {
             <h3 className="text-sm text-muted-foreground uppercase tracking-wide">
               {activeTab === 'recent' ? 'Recent' : 
                activeTab === 'favorite' ? 'Favorites' : 
-               activeTab === 'wishlist' ? 'Wishlist' : 
+               activeTab === 'wishlist' ? 'List' : 
                activeTab === 'duds' ? 'Duds' : 'Completed'}
             </h3>
             <div className="flex items-center gap-1">
@@ -603,12 +754,24 @@ export default function App() {
           {!isCollapsed && (
             <div className="space-y-2 pb-4">
               {getFilteredUiGames().map((game) => (
-                <SidebarGameCard key={game.id} game={game} onClick={() => handleGameClick(game)} />
+                <SidebarGameCard
+                  key={game.id}
+                  game={game}
+                  onClick={() => handleGameClick(game)}
+                  showFavoriteToggle={activeCategory === 'inprogress'}
+                  onToggleFavorite={handleToggleFavorite}
+                />
               ))}
               {getFilteredUiGames().length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>No {activeTab} games found</p>
+                  <p>
+                    No{' '}
+                    {activeTab === 'wishlist'
+                      ? 'list'
+                      : activeTab}{' '}
+                    games found
+                  </p>
                 </div>
               )}
             </div>
@@ -727,8 +890,9 @@ export default function App() {
                 <div className="space-y-6">
                   {getRecentGames().length === 0 && !libraryLoading && (
                     <p className="text-sm text-muted-foreground">
-                      No recent games yet — add one from IGDB search or change a game&apos;s category in the
-                      API/database.
+                      No games in <strong className="text-primary">Recent</strong> yet. Add a title from IGDB — it
+                      lands here first. Use the sidebar to move games to your <strong className="text-accent">List</strong>{' '}
+                      or <strong className="text-destructive">Favorites</strong> if you like.
                     </p>
                   )}
                   {getRecentGames().map((game, index) => (
@@ -737,6 +901,7 @@ export default function App() {
                       game={game} 
                       onClick={() => handleGameClick(game)}
                       isLargest={index === 0}
+                      onToggleFavorite={handleToggleFavorite}
                     />
                   ))}
                 </div>
@@ -904,6 +1069,13 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      <CompletionSurveyModal
+        open={completionSurveyOpen && completionDraft != null}
+        gameTitle={completionDraft?.game.title ?? ''}
+        onCancel={handleCompletionSurveyCancel}
+        onConfirm={handleCompletionSurveyConfirm}
+      />
 
       <IgdbGameDetailModal
         game={igdbPreview}

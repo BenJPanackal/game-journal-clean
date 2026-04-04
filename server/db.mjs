@@ -75,6 +75,9 @@ function ensureSchema(db) {
   if (!columnExists(db, 'games', 'list_price')) {
     db.exec('ALTER TABLE games ADD COLUMN list_price REAL');
   }
+  if (!columnExists(db, 'games', 'completion_memory')) {
+    db.exec('ALTER TABLE games ADD COLUMN completion_memory TEXT');
+  }
 }
 
 export function openDatabase() {
@@ -100,6 +103,7 @@ export function rowToGame(row) {
     completedDate: row.completed_date,
     userRating: row.user_rating,
     listPrice: row.list_price != null && Number.isFinite(Number(row.list_price)) ? Number(row.list_price) : null,
+    completionMemory: row.completion_memory != null ? String(row.completion_memory) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

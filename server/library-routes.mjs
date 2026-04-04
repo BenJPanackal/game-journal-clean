@@ -114,8 +114,8 @@ export function createLibraryRouter(db) {
           db.prepare(`
             INSERT INTO games (
               igdb_id, name, cover_url, release_year, category, progress,
-              hours_played, last_played, completed_date, user_rating, list_price
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              hours_played, last_played, completed_date, user_rating, list_price, completion_memory
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             igdbId,
             name,
@@ -127,7 +127,8 @@ export function createLibraryRouter(db) {
             lastPlayed,
             completedDate,
             Number.isFinite(userRating) ? userRating : null,
-            listPriceToStore
+            listPriceToStore,
+            null
           );
         }
       });
@@ -158,6 +159,7 @@ export function createLibraryRouter(db) {
       'completedDate',
       'userRating',
       'listPrice',
+      'completionMemory',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -234,7 +236,27 @@ export function createLibraryRouter(db) {
             ? null
             : Number(patch.listPrice)
           : row.list_price,
+      completion_memory:
+        patch.completionMemory !== undefined
+          ? patch.completionMemory == null
+            ? null
+            : String(patch.completionMemory)
+          : row.completion_memory,
     };
+
+    if (next.progress >= 100 && ['recent', 'favorite', 'wishlist'].includes(next.category)) {
+      const ur = Number.isFinite(next.user_rating) ? next.user_rating : null;
+      if (ur == null || ur < 1 || ur > 10) {
+        return badRequest(
+          res,
+          'Progress 100 requires a user rating (1–10). Finish the game with a journal entry, or PATCH userRating together with progress.'
+        );
+      }
+      next.category = 'completed';
+      if (!next.completed_date) {
+        next.completed_date = new Date().toISOString();
+      }
+    }
 
     if (!next.name) return badRequest(res, 'name cannot be empty');
     if (!CATEGORIES.has(next.category)) return badRequest(res, 'Invalid category');
@@ -262,6 +284,7 @@ export function createLibraryRouter(db) {
           completed_date = ?,
           user_rating = ?,
           list_price = ?,
+          completion_memory = ?,
           updated_at = datetime('now')
         WHERE igdb_id = ?
       `).run(
@@ -275,6 +298,7 @@ export function createLibraryRouter(db) {
         next.completed_date,
         Number.isFinite(next.user_rating) ? next.user_rating : null,
         next.list_price != null && Number.isFinite(next.list_price) ? next.list_price : null,
+        next.completion_memory != null ? next.completion_memory : null,
         igdbId
       );
       res.json({ game: rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId)) });
@@ -338,6 +362,25 @@ export function createLibraryRouter(db) {
       if (Number.isFinite(p) && p >= 0 && p <= 100) syncProgress = p;
     }
 
+    const gBefore = db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(gameId);
+    if (!gBefore) {
+      return badRequest(res, 'Game not in library — add the game before creating a journal entry');
+    }
+
+    if (syncProgress === 100 && !['completed', 'dud'].includes(gBefore.category)) {
+      const fg = body.finishGame;
+      if (!fg || typeof fg !== 'object') {
+        return badRequest(
+          res,
+          'finishGame is required when syncGameProgress is 100 (provide userRating 1–10 and optional completionMemory)'
+        );
+      }
+      const ur = Number(fg.userRating);
+      if (!Number.isFinite(ur) || ur < 1 || ur > 10) {
+        return badRequest(res, 'finishGame.userRating must be a number from 1 to 10');
+      }
+    }
+
     try {
       const tx = db.transaction(() => {
         db.prepare(`
@@ -360,22 +403,57 @@ export function createLibraryRouter(db) {
           tagsJson,
           entryDate
         );
+
+        const g = db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(gameId);
+        let category = g.category;
+        if (category === 'wishlist') category = 'recent';
+
+        let progress = g.progress;
+        let completed_date = g.completed_date;
+        let user_rating =
+          g.user_rating != null && Number.isFinite(Number(g.user_rating)) ? Number(g.user_rating) : null;
+        let completion_memory =
+          g.completion_memory != null && String(g.completion_memory).trim() !== ''
+            ? String(g.completion_memory)
+            : null;
+
         if (syncProgress != null) {
-          const g = db.prepare('SELECT igdb_id FROM games WHERE igdb_id = ?').get(gameId);
-          if (g) {
-            db.prepare(`UPDATE games SET progress = ?, updated_at = datetime('now') WHERE igdb_id = ?`).run(
-              syncProgress,
-              gameId
-            );
-          }
+          progress = syncProgress;
         }
+
+        if (syncProgress === 100 && !['completed', 'dud'].includes(g.category)) {
+          category = 'completed';
+          completed_date = new Date().toISOString();
+          const fg = body.finishGame;
+          user_rating = Number(fg.userRating);
+          const mem = fg.completionMemory;
+          completion_memory =
+            mem != null && String(mem).trim() !== '' ? String(mem).trim() : null;
+        }
+
+        db.prepare(`
+          UPDATE games SET
+            category = ?,
+            progress = ?,
+            last_played = ?,
+            completed_date = ?,
+            user_rating = ?,
+            completion_memory = ?,
+            updated_at = datetime('now')
+          WHERE igdb_id = ?
+        `).run(
+          category,
+          progress,
+          entryDate,
+          completed_date,
+          user_rating,
+          completion_memory,
+          gameId
+        );
       });
       tx();
       const row = db.prepare('SELECT * FROM journal_entries WHERE id = ?').get(id);
-      let game = null;
-      if (syncProgress != null) {
-        game = rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(gameId));
-      }
+      const game = rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(gameId));
       res.status(201).json({ entry: rowToEntry(row), game });
     } catch (e) {
       if (e && e.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {

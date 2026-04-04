@@ -17,6 +17,8 @@ export type UiGame = {
   completedDate?: string;
   /** USD list price from library row; null/undefined shows as em dash in UI */
   listPrice?: number | null;
+  userRating?: number | null;
+  completionMemory?: string | null;
 };
 
 const FALLBACK_COVER =
@@ -67,7 +69,8 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
   name: string;
   coverUrl: string | null;
   releaseYear: number | null;
-  category: 'wishlist';
+  /** Shows under Recent; user can move to List or Favorites from the sidebar */
+  category: 'recent';
   progress: number;
   listPrice?: number | null;
 } {
@@ -78,7 +81,7 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
     name: g.name,
     coverUrl: igdbCoverUrl(g),
     releaseYear: year != null ? year : null,
-    category: 'wishlist',
+    category: 'recent',
     progress: 0,
     ...(listPrice != null ? { listPrice } : {}),
   };
@@ -101,6 +104,8 @@ export function apiGameToUiGame(g: LibraryGame): UiGame {
     colors: DEFAULT_COLORS,
     completedDate: g.completedDate ?? undefined,
     listPrice: g.listPrice ?? null,
+    userRating: g.userRating ?? null,
+    completionMemory: g.completionMemory ?? null,
   };
 }
 
@@ -190,4 +195,6 @@ export type NewJournalEntryPayload = {
   sessionLength: string | null;
   progressAtEntry: number | null;
   tags: string[];
+  /** Required by API when moving to 100% from an in-progress category */
+  finishGame?: { userRating: number; completionMemory?: string | null };
 };

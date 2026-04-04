@@ -6,7 +6,7 @@ import type { UiGame } from '../lib/libraryUi';
 interface JournalEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (payload: NewJournalEntryPayload) => void | Promise<void>;
+  onSave: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
   game: UiGame | null;
 }
 
@@ -29,11 +29,17 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
   const [activeTag, setActiveTag] = useState('');
   const [progressError, setProgressError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [completionRating, setCompletionRating] = useState(8);
+  const [completionMemory, setCompletionMemory] = useState('');
+  const [completionError, setCompletionError] = useState('');
 
   useEffect(() => {
     if (!isOpen || !game) return;
     setEntryData((prev) => ({ ...prev, progress: String(game.progress ?? 0) }));
     setProgressError('');
+    setCompletionRating(8);
+    setCompletionMemory('');
+    setCompletionError('');
   }, [isOpen, game?.id, game?.progress]);
 
   // Ordered from happy to unhappy with neutral in middle - Fixed neutral color
@@ -73,12 +79,35 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
     setEntryData(prev => ({ ...prev, progress: value }));
   };
 
+  const effectiveProgress =
+    entryData.progress === ''
+      ? gameProgress
+      : parseFloat(entryData.progress);
+  const parsedProgress =
+    entryData.progress === '' || Number.isNaN(effectiveProgress)
+      ? gameProgress
+      : effectiveProgress;
+  const needsCompletionSurvey =
+    parsedProgress >= 100 &&
+    game != null &&
+    !['completed', 'dud'].includes(game.category);
+
   const handleSave = async () => {
     if (!game) return;
     if (!entryData.title.trim()) return;
     if (progressError) return;
 
+    if (needsCompletionSurvey) {
+      if (!Number.isFinite(completionRating) || completionRating < 1 || completionRating > 10) {
+        setCompletionError('Choose an overall rating from 1 to 10');
+        return;
+      }
+      setCompletionError('');
+    }
+
     const progressNum = entryData.progress === '' ? null : parseFloat(entryData.progress);
+    const progressAtEntry =
+      progressNum != null && !Number.isNaN(progressNum) ? progressNum : gameProgress;
     const payload: NewJournalEntryPayload = {
       title: entryData.title.trim(),
       entryDate: new Date().toISOString(),
@@ -89,14 +118,23 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
       notes: entryData.notes.trim() || null,
       mood: entryData.mood,
       sessionLength: entryData.sessionLength.trim() || null,
-      progressAtEntry:
-        progressNum != null && !Number.isNaN(progressNum) ? progressNum : gameProgress,
+      progressAtEntry,
       tags: entryData.tags,
+      finishGame: needsCompletionSurvey
+        ? {
+            userRating: completionRating,
+            completionMemory: completionMemory.trim() || null,
+          }
+        : undefined,
     };
 
     setSaving(true);
     try {
-      await onSave(payload);
+      const result = await onSave(payload);
+      if (result === 'deferred') {
+        onClose();
+        return;
+      }
       setEntryData({
         title: '',
         areaExplored: '',
@@ -110,6 +148,9 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
         tags: [],
       });
       setProgressError('');
+      setCompletionRating(8);
+      setCompletionMemory('');
+      setCompletionError('');
       onClose();
     } catch (e) {
       console.error('Save entry failed', e);
@@ -271,6 +312,64 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
             </div>
           </div>
 
+          {needsCompletionSurvey && (
+            <div
+              className="rounded-lg border border-green-500/40 bg-green-500/10 p-4 space-y-3"
+              role="region"
+              aria-label="Completion survey"
+            >
+              <div className="flex items-center gap-2 text-sm font-medium readable-text text-green-400">
+                <Trophy className="w-4 h-4" />
+                You&apos;re at 100% — finish line survey
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This saves your overall rating and a short memory to your library. The game moves to{' '}
+                <strong className="text-foreground">Completed</strong>.
+              </p>
+              <div className="space-y-2">
+                <label className="block text-sm readable-text">Overall rating (1–10) *</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setCompletionRating(n);
+                        setCompletionError('');
+                      }}
+                      className={`min-w-[2.25rem] px-2 py-1.5 rounded-md text-xs font-medium fast-transition ${
+                        completionRating === n
+                          ? 'bg-primary text-primary-foreground ring-2 ring-primary/50'
+                          : 'bg-muted/40 text-muted-foreground hover:bg-muted/60'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm readable-text" htmlFor="completion-memory">
+                  Memory / final thoughts (optional)
+                </label>
+                <textarea
+                  id="completion-memory"
+                  value={completionMemory}
+                  onChange={(e) => setCompletionMemory(e.target.value)}
+                  placeholder="What will you remember most? Favorite moment, verdict, who you’d recommend it to…"
+                  rows={3}
+                  className="w-full px-3 py-2 bg-input/50 border border-border/50 rounded-lg readable-text text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                />
+              </div>
+              {completionError && (
+                <div className="flex items-center gap-1 text-xs text-destructive">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  {completionError}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Segmented Input Blocks */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -397,7 +496,15 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
             </button>
             <button
               onClick={() => void handleSave()}
-              disabled={saving || !entryData.title.trim() || !!progressError}
+              disabled={
+                saving ||
+                !entryData.title.trim() ||
+                !!progressError ||
+                (needsCompletionSurvey &&
+                  (!Number.isFinite(completionRating) ||
+                    completionRating < 1 ||
+                    completionRating > 10))
+              }
               className="px-6 py-2 bg-primary/20 text-primary border border-primary/50 rounded-lg hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition interactive-hover"
             >
               <Save className="w-4 h-4 inline mr-2" />
