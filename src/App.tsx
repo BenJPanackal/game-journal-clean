@@ -16,7 +16,10 @@ import {
   type NewJournalEntryPayload,
   type UiGame,
 } from './lib/libraryUi';
+import { useCoverPalette } from './hooks/useCoverPalette';
 
+
+const titleShadow = '0 1px 2px rgba(0,0,0,0.92), 0 0 14px rgba(0,0,0,0.35)';
 
 const SidebarGameCard = ({
   game,
@@ -28,7 +31,9 @@ const SidebarGameCard = ({
   onClick: () => void;
   showFavoriteToggle: boolean;
   onToggleFavorite: (game: UiGame) => void;
-}) => (
+}) => {
+  const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
+  return (
   <div 
     onClick={() => {
       console.log('🎮 Sidebar game clicked:', game.title);
@@ -42,6 +47,7 @@ const SidebarGameCard = ({
           <img
             src={game.cover}
             alt={game.title}
+            crossOrigin="anonymous"
             className="w-10 h-14 object-cover rounded border border-primary/20"
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
@@ -51,7 +57,8 @@ const SidebarGameCard = ({
             <div 
               className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs text-white z-depth-1"
               style={{
-                background: game.progress === 100 ? '#22C55E' : `linear-gradient(45deg, ${game.colors.primary}, ${game.colors.secondary})`,
+                background:
+                  game.progress === 100 ? '#22C55E' : coverPalette.progressGradient,
                 fontSize: '9px'
               }}
             >
@@ -62,7 +69,10 @@ const SidebarGameCard = ({
         
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-1 gap-1">
-            <h4 className="text-xs truncate readable-accent min-w-0" style={{ color: game.colors.primary }}>
+            <h4
+              className="text-xs truncate min-w-0 font-medium"
+              style={{ color: coverPalette.titleColor, textShadow: titleShadow }}
+            >
               {game.title}
             </h4>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -116,7 +126,8 @@ const SidebarGameCard = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const MainGameCard = ({
   game,
@@ -129,9 +140,7 @@ const MainGameCard = ({
   isLargest?: boolean;
   onToggleFavorite?: (game: UiGame) => void;
 }) => {
-  const progressGradient = game.progress > 0 ? 
-    (game.progress === 100 ? 'linear-gradient(90deg, #22C55E, #16A34A)' : `linear-gradient(90deg, ${game.colors.primary}, ${game.colors.secondary})`) : 
-    'none';
+  const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
 
   const cardSize = isLargest ? "p-8" : "p-6";
   const imageSize = isLargest ? "w-32 h-42" : "w-24 h-32";
@@ -151,6 +160,7 @@ const MainGameCard = ({
           <img
             src={game.cover}
             alt={game.title}
+            crossOrigin="anonymous"
             className={`${imageSize} object-cover rounded-lg border border-primary/20 z-depth-1 shadow-lg`}
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
@@ -167,7 +177,10 @@ const MainGameCard = ({
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-1">
-                <h3 className={`${titleSize} readable-accent`} style={{ color: game.colors.primary }}>
+                <h3
+                  className={`${titleSize} font-semibold tracking-tight`}
+                  style={{ color: coverPalette.titleColor, textShadow: titleShadow }}
+                >
                   {game.title}
                 </h3>
                 {game.streak > 0 && (
@@ -222,20 +235,21 @@ const MainGameCard = ({
                 <span className="text-muted-foreground">Progress</span>
                 <span className="readable-text">{game.progress}%</span>
               </div>
-              <div className="w-full bg-muted/50 rounded-full h-3 overflow-hidden">
+              <div className="w-full rounded-full h-3 overflow-hidden" style={coverPalette.trackStyle}>
                 <div 
                   className="h-3 rounded-full smooth-transition relative"
                   style={{
                     width: `${game.progress}%`,
-                    background: progressGradient,
-                    boxShadow: `0 0 6px ${game.progress === 100 ? '#22C55E' : game.colors.primary}30`
+                    background: coverPalette.progressGradient,
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.45)',
                   }}
                 >
                   <div 
                     className="absolute inset-0 rounded-full"
                     style={{
-                      background: `linear-gradient(90deg, transparent, ${game.progress === 100 ? '#16A34A' : game.colors.secondary}20, transparent)`,
-                      animation: 'shimmer 2s infinite'
+                      background:
+                        'linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)',
+                      animation: 'shimmer 2s infinite',
                     }}
                   />
                 </div>

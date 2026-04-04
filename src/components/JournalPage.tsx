@@ -5,6 +5,7 @@ import type { NewJournalEntryPayload } from '../lib/libraryUi';
 import { apiEntryToJournalRow, formatListPriceUsd } from '../lib/libraryUi';
 import type { LibraryEntry } from '../api/library';
 import type { UiGame } from '../lib/libraryUi';
+import { useCoverPalette } from '../hooks/useCoverPalette';
 
 interface JournalPageProps {
   game: UiGame;
@@ -23,9 +24,8 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
     [entries]
   );
 
-  const progressGradient = game.progress > 0 ? 
-    `linear-gradient(90deg, ${game.colors.primary}, ${game.colors.secondary})` : 
-    'none';
+  const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
+  const titleShadow = '0 1px 3px rgba(0,0,0,0.92), 0 0 20px rgba(0,0,0,0.4)';
 
   const toggleEntryExpansion = (entryId: string) => {
     setExpandedEntries(prev => {
@@ -75,14 +75,21 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
               <img
                 src={game.cover}
                 alt={game.title}
+                crossOrigin="anonymous"
                 className="w-16 h-20 object-cover rounded-lg border border-primary/20 z-depth-1"
                 onError={(e) => {
                   e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
                 }}
               />
               <div>
-                <h1 className="text-3xl readable-accent mb-2" style={{ color: game.colors.primary }}>
-                  {game.title} Journal
+                <h1 className="text-3xl mb-2">
+                  <span
+                    className="font-semibold"
+                    style={{ color: coverPalette.titleColor, textShadow: titleShadow }}
+                  >
+                    {game.title}
+                  </span>
+                  <span className="text-muted-foreground font-normal"> Journal</span>
                 </h1>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -129,20 +136,21 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
                 <span className="text-muted-foreground">Story Progress</span>
                 <span className="readable-text">{game.progress}%</span>
               </div>
-              <div className="w-full bg-muted/50 rounded-full h-2 overflow-hidden">
+              <div className="w-full rounded-full h-2 overflow-hidden" style={coverPalette.trackStyle}>
                 <div 
                   className="h-2 rounded-full smooth-transition relative"
                   style={{
                     width: `${game.progress}%`,
-                    background: progressGradient,
-                    boxShadow: `0 0 6px ${game.colors.primary}30`
+                    background: coverPalette.progressGradient,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.45)',
                   }}
                 >
                   <div 
                     className="absolute inset-0 rounded-full"
                     style={{
-                      background: `linear-gradient(90deg, transparent, ${game.colors.secondary}20, transparent)`,
-                      animation: 'shimmer 2s infinite'
+                      background:
+                        'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                      animation: 'shimmer 2s infinite',
                     }}
                   />
                 </div>
