@@ -132,8 +132,8 @@ export default function IgdbGameDetailModal({
                       Price
                     </span>
                     <span className="text-[11px] block opacity-80 mb-1">
-                      IGDB does not publish MSRP. When IGDB links a Steam app, we show the current Steam Store
-                      price (US region, Valve JSON API).
+                      IGDB does not list prices. We only show a dollar amount when IGDB links this game to a
+                      Steam app and Steam’s public API returns a US store price (paid titles).
                     </span>
                     {merged.steamPrice ? (
                       <span className="text-foreground block">
@@ -147,11 +147,22 @@ export default function IgdbGameDetailModal({
                           <span className="ml-2 text-xs text-secondary">-{merged.steamPrice.discountPercent}%</span>
                         )}
                       </span>
-                    ) : (
+                    ) : detailLoading && !remote ? (
+                      <span className="text-xs opacity-80">Checking IGDB store links and Steam price…</span>
+                    ) : merged.steamPriceHint === "steam_linked_no_price" ? (
                       <span className="text-xs">
-                        No Steam listing linked in IGDB for this title, or Steam did not return a price (free /
-                        unreleased / regional).
+                        IGDB links Steam (app {merged.steamAppId ?? "—"}), but Steam did not return a price —
+                        common for free games, unreleased listings, or when there is no paid US price block.
                       </span>
+                    ) : merged.steamPriceHint === "no_steam_link" ? (
+                      <span className="text-xs">
+                        IGDB has no Steam app id for this title, so we cannot ask Steam for a price. Use the
+                        store links below if another shop is listed.
+                      </span>
+                    ) : detailErr ? (
+                      <span className="text-xs">Could not load full game details — Steam price status unknown.</span>
+                    ) : (
+                      <span className="text-xs">Could not determine a Steam shelf price from available data.</span>
                     )}
                   </span>
                 </p>

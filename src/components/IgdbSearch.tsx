@@ -33,6 +33,9 @@ export type IgdbGame = {
     finalFormatted: string;
     initialFormatted: string;
   } | null;
+  /** From server: why steamPrice may be missing (IGDB has no MSRP). */
+  steamPriceHint?: "available" | "no_steam_link" | "steam_linked_no_price";
+  steamAppId?: number | null;
 
   // raw-IGDB
   first_release_date?: number;

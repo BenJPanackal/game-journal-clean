@@ -127,6 +127,11 @@ function simplifyDetailGame(g, steamPrice = null) {
         .filter(Boolean)
     : [];
   const externalGames = simplifyExternalGames(g.external_games);
+  const steamEg = findSteamExternalGame(externalGames);
+  const steamAppId = steamEg?.steamAppId ?? null;
+  /** IGDB has no dollar fields; price only when Steam linked + Valve returns price_overview (US). */
+  const steamPriceHint =
+    steamPrice != null ? 'available' : steamAppId != null ? 'steam_linked_no_price' : 'no_steam_link';
   return {
     ...simplifySearchGame(g),
     summary: g.summary ?? null,
@@ -135,6 +140,8 @@ function simplifyDetailGame(g, steamPrice = null) {
     screenshotUrls,
     externalGames,
     steamPrice,
+    steamPriceHint,
+    steamAppId,
   };
 }
 
