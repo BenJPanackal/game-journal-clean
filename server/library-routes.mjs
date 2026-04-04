@@ -57,7 +57,28 @@ export function createLibraryRouter(db) {
       return badRequest(res, 'progress must be between 0 and 100');
     }
 
-    const existedBefore = Boolean(db.prepare('SELECT 1 FROM games WHERE igdb_id = ?').get(igdbId));
+    const existedRow = db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId);
+    const existedBefore = Boolean(existedRow);
+
+    let listPriceToStore;
+    if (Object.prototype.hasOwnProperty.call(body, 'listPrice')) {
+      if (body.listPrice === null) {
+        listPriceToStore = null;
+      } else {
+        const lp = Number(body.listPrice);
+        if (Number.isNaN(lp) || lp < 0) {
+          return badRequest(res, 'listPrice must be a non-negative number or null');
+        }
+        listPriceToStore = lp;
+      }
+    } else if (existedBefore) {
+      listPriceToStore =
+        existedRow.list_price != null && Number.isFinite(Number(existedRow.list_price))
+          ? Number(existedRow.list_price)
+          : null;
+    } else {
+      listPriceToStore = null;
+    }
 
     try {
       const tx = db.transaction(() => {
@@ -73,6 +94,7 @@ export function createLibraryRouter(db) {
               last_played = ?,
               completed_date = ?,
               user_rating = COALESCE(?, user_rating),
+              list_price = ?,
               updated_at = datetime('now')
             WHERE igdb_id = ?
           `).run(
@@ -85,14 +107,15 @@ export function createLibraryRouter(db) {
             lastPlayed,
             completedDate,
             Number.isFinite(userRating) ? userRating : null,
+            listPriceToStore,
             igdbId
           );
         } else {
           db.prepare(`
             INSERT INTO games (
               igdb_id, name, cover_url, release_year, category, progress,
-              hours_played, last_played, completed_date, user_rating
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              hours_played, last_played, completed_date, user_rating, list_price
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             igdbId,
             name,
@@ -103,7 +126,8 @@ export function createLibraryRouter(db) {
             Number.isFinite(hoursPlayed) ? hoursPlayed : null,
             lastPlayed,
             completedDate,
-            Number.isFinite(userRating) ? userRating : null
+            Number.isFinite(userRating) ? userRating : null,
+            listPriceToStore
           );
         }
       });
@@ -133,6 +157,7 @@ export function createLibraryRouter(db) {
       'lastPlayed',
       'completedDate',
       'userRating',
+      'listPrice',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -148,6 +173,17 @@ export function createLibraryRouter(db) {
         return badRequest(res, 'progress must be between 0 and 100');
       }
       patch.progress = p;
+    }
+    if (patch.listPrice !== undefined) {
+      if (patch.listPrice === null) {
+        patch.listPrice = null;
+      } else {
+        const lp = Number(patch.listPrice);
+        if (Number.isNaN(lp) || lp < 0) {
+          return badRequest(res, 'listPrice must be a non-negative number or null');
+        }
+        patch.listPrice = lp;
+      }
     }
 
     if (Object.keys(patch).length === 0) {
@@ -192,10 +228,19 @@ export function createLibraryRouter(db) {
             ? null
             : Number(patch.userRating)
           : row.user_rating,
+      list_price:
+        patch.listPrice !== undefined
+          ? patch.listPrice == null
+            ? null
+            : Number(patch.listPrice)
+          : row.list_price,
     };
 
     if (!next.name) return badRequest(res, 'name cannot be empty');
     if (!CATEGORIES.has(next.category)) return badRequest(res, 'Invalid category');
+    if (next.list_price != null && (Number.isNaN(next.list_price) || next.list_price < 0)) {
+      return badRequest(res, 'Invalid listPrice');
+    }
 
     const releaseYearVal =
       next.release_year == null || next.release_year === ''
@@ -216,6 +261,7 @@ export function createLibraryRouter(db) {
           last_played = ?,
           completed_date = ?,
           user_rating = ?,
+          list_price = ?,
           updated_at = datetime('now')
         WHERE igdb_id = ?
       `).run(
@@ -228,6 +274,7 @@ export function createLibraryRouter(db) {
         next.last_played,
         next.completed_date,
         Number.isFinite(next.user_rating) ? next.user_rating : null,
+        next.list_price != null && Number.isFinite(next.list_price) ? next.list_price : null,
         igdbId
       );
       res.json({ game: rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(igdbId)) });

@@ -14,6 +14,11 @@ const CATEGORIES = new Set(['recent', 'favorite', 'wishlist', 'completed', 'dud'
 
 export { CATEGORIES, DB_PATH };
 
+function columnExists(db, table, col) {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all();
+  return rows.some((r) => r.name === col);
+}
+
 function ensureSchema(db) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -66,6 +71,10 @@ function ensureSchema(db) {
   if (!row) {
     db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(MIGRATION_VERSION);
   }
+
+  if (!columnExists(db, 'games', 'list_price')) {
+    db.exec('ALTER TABLE games ADD COLUMN list_price REAL');
+  }
 }
 
 export function openDatabase() {
@@ -90,6 +99,7 @@ export function rowToGame(row) {
     lastPlayed: row.last_played,
     completedDate: row.completed_date,
     userRating: row.user_rating,
+    listPrice: row.list_price != null && Number.isFinite(Number(row.list_price)) ? Number(row.list_price) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

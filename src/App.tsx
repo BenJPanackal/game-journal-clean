@@ -1,195 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Zap, Trophy, Target, Plus, Minus, X, Edit3, Calendar, Image, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, DollarSign } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
+import IgdbGameDetailModal from './components/IgdbGameDetailModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
-
-
-
-// Mock data with realistic game color schemes, streak information, and completed games
-const mockGames = [
-  {
-    id: 1,
-    title: "Cyberpunk 2077",
-    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=300&h=400&fit=crop",
-    lastPlayed: "2 hours ago",
-    progress: 78,
-    hoursPlayed: 45,
-    category: "recent",
-    releaseYear: 2020,
-    streak: 5,
-    colors: {
-      primary: "#00FFFF",
-      secondary: "#FF0080",
-      accent: "#FFFF00"
-    }
-  },
-  {
-    id: 2,
-    title: "The Witcher 3",
-    image: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=400&fit=crop",
-    lastPlayed: "Yesterday",
-    progress: 92,
-    hoursPlayed: 127,
-    category: "favorite",
-    releaseYear: 2015,
-    streak: 3,
-    colors: {
-      primary: "#8B0000",
-      secondary: "#CD853F",
-      accent: "#2F4F4F"
-    }
-  },
-  {
-    id: 3,
-    title: "Elden Ring",
-    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=300&h=400&fit=crop",
-    lastPlayed: "3 days ago",
-    progress: 45,
-    hoursPlayed: 67,
-    category: "recent",
-    releaseYear: 2022,
-    streak: 0,
-    colors: {
-      primary: "#DAA520",
-      secondary: "#8B4513",
-      accent: "#696969"
-    }
-  },
-  {
-    id: 4,
-    title: "Starfield",
-    image: "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=300&h=400&fit=crop",
-    lastPlayed: "Never",
-    progress: 0,
-    hoursPlayed: 0,
-    category: "wishlist",
-    releaseYear: 2023,
-    streak: 0,
-    colors: {
-      primary: "#4169E1",
-      secondary: "#1E90FF",
-      accent: "#87CEEB"
-    }
-  },
-  {
-    id: 5,
-    title: "Baldur's Gate 3",
-    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300&h=400&fit=crop",
-    lastPlayed: "1 week ago",
-    progress: 67,
-    hoursPlayed: 89,
-    category: "favorite",
-    releaseYear: 2023,
-    streak: 2,
-    colors: {
-      primary: "#800080",
-      secondary: "#9370DB",
-      accent: "#DDA0DD"
-    }
-  }
-];
-
-// Mock completed games
-const mockCompletedGames = [
-  {
-    id: 6,
-    title: "God of War",
-    image: "https://images.unsplash.com/photo-1560419015-7c427e8ae5ba?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1560419015-7c427e8ae5ba?w=300&h=400&fit=crop",
-    lastPlayed: "2 months ago",
-    progress: 100,
-    hoursPlayed: 85,
-    category: "completed",
-    releaseYear: 2018,
-    completedDate: "2024-11-15",
-    colors: {
-      primary: "#C41E3A",
-      secondary: "#8B0000",
-      accent: "#FFD700"
-    }
-  },
-  {
-    id: 7,
-    title: "Horizon Zero Dawn",
-    image: "https://images.unsplash.com/photo-1580234820958-493f3681d1e4?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1580234820958-493f3681d1e4?w=300&h=400&fit=crop",
-    lastPlayed: "3 months ago",
-    progress: 100,
-    hoursPlayed: 72,
-    category: "completed",
-    releaseYear: 2017,
-    completedDate: "2024-10-22",
-    colors: {
-      primary: "#FF4500",
-      secondary: "#32CD32",
-      accent: "#87CEEB"
-    }
-  },
-  {
-    id: 8,
-    title: "Red Dead Redemption 2",
-    image: "https://images.unsplash.com/photo-1579952363873-27d3bfad9c0d?w=400&h=600&fit=crop",
-    cover: "https://images.unsplash.com/photo-1579952363873-27d3bfad9c0d?w=300&h=400&fit=crop",
-    lastPlayed: "6 months ago",
-    progress: 100,
-    hoursPlayed: 156,
-    category: "completed",
-    releaseYear: 2018,
-    completedDate: "2024-07-08",
-    colors: {
-      primary: "#8B4513",
-      secondary: "#DAA520",
-      accent: "#CD853F"
-    }
-  }
-];
-
-const mockJournalEntry = {
-  title: "Epic Boss Fight in Cyberpunk 2077",
-  content: "Just defeated Adam Smasher after what felt like hours of preparation. The build-up to this fight was incredible - all the choices I made throughout the game led to this moment. Used my netrunner build with legendary quickhacks and it was devastating.",
-  date: "2 hours ago",
-  game: "Cyberpunk 2077",
-  sessionLength: "4h 30m",
-  areaExplored: "Arasaka Tower",
-  bossDefeated: "Adam Smasher",
-  itemFound: "Legendary Quickhack",
-  mood: "excited",
-  tags: ["Boss Fight", "Story Beat", "Epic Moment"],
-  screenshot: "https://images.unsplash.com/photo-1580234820958-493f3681d1e4?w=400&h=300&fit=crop"
-};
-// ✅ New unique name to avoid collision
-function igdbToGameCard(g: IgdbGame) {
-  const coverUrl = g.cover?.image_id
-    ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${g.cover.image_id}.jpg`
-    : "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop";
-
-  return {
-    id: g.id,
-    title: g.name,
-    image: coverUrl,
-    cover: coverUrl,
-    lastPlayed: "Never",
-    progress: 0,
-    hoursPlayed: 0,
-    category: "wishlist" as const,
-    releaseYear: g.first_release_date
-      ? new Date(g.first_release_date * 1000).getFullYear()
-      : undefined,
-    streak: 0,
-    colors: {
-      primary: "#6366F1",
-      secondary: "#10B981",
-      accent: "#F59E0B",
-    },
-  };
-}
+import { createEntry, fetchLibrary, patchGame, postGame } from './api/library';
+import type { LibraryEntry, LibraryGame } from './api/library';
+import {
+  apiEntryToDashboard,
+  apiGameToUiGame,
+  formatListPriceUsd,
+  igdbToNewLibraryGame,
+  type NewJournalEntryPayload,
+  type UiGame,
+} from './lib/libraryUi';
 
 
 const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) => (
@@ -251,6 +76,10 @@ const SidebarGameCard = ({ game, onClick }: { game: any; onClick: () => void }) 
           {game.hoursPlayed > 0 && (
             <p className="text-xs text-secondary">{game.hoursPlayed}h</p>
           )}
+          <p className="text-xs text-accent flex items-center gap-1 mt-0.5">
+            <DollarSign className="w-3 h-3 flex-shrink-0" />
+            {formatListPriceUsd(game.listPrice)}
+          </p>
         </div>
       </div>
     </div>
@@ -317,6 +146,10 @@ const MainGameCard = ({ game, onClick, isLargest = false }: { game: any; onClick
                     {game.hoursPlayed}h played
                   </span>
                 )}
+                <span className="flex items-center gap-1">
+                  <DollarSign className="w-4 h-4" />
+                  {formatListPriceUsd(game.listPrice)}
+                </span>
               </div>
             </div>
             
@@ -370,24 +203,13 @@ const Badge = ({ children, className = '' }: { children: React.ReactNode; classN
     {children}
   </span>
 );
-function mapIgdbToCard(g: IgdbGame) {
-  return {
-    id: g.id,
-    title: g.name,
-    image: g.coverUrl || "",
-    cover: g.coverUrl || "",
-    lastPlayed: "Never",
-    progress: 0,
-    hoursPlayed: 0,
-    category: "wishlist",       // you can change this default later
-    releaseYear: g.year ?? undefined,
-    streak: 0,
-    colors: {
-      primary: "#6366F1",
-      secondary: "#10B981",
-      accent: "#F59E0B",
-    },
-  };
+
+function mergeGame(list: LibraryGame[], next: LibraryGame): LibraryGame[] {
+  const i = list.findIndex((g) => g.igdbId === next.igdbId);
+  if (i === -1) return [next, ...list];
+  const copy = [...list];
+  copy[i] = next;
+  return copy;
 }
 
 export default function App() {
@@ -395,46 +217,69 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('recent');
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
-  const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [selectedGame, setSelectedGame] = useState<UiGame | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
-  const [journalEntries, setJournalEntries] = useState([mockJournalEntry]);
+  const [libraryGames, setLibraryGames] = useState<LibraryGame[]>([]);
+  const [libraryEntries, setLibraryEntries] = useState<LibraryEntry[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [entryExpanded, setEntryExpanded] = useState(false);
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
+  const [igdbPreview, setIgdbPreview] = useState<IgdbGame | null>(null);
+
+  const gameTitleById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const g of libraryGames) m.set(g.igdbId, g.name);
+    return m;
+  }, [libraryGames]);
+
+  const refreshLibrary = useCallback(async () => {
+    setLibraryError(null);
+    const { games, entries } = await fetchLibrary();
+    setLibraryGames(games);
+    setLibraryEntries(entries);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLibraryLoading(true);
+    refreshLibrary()
+      .catch((e) => {
+        if (!cancelled) setLibraryError(e instanceof Error ? e.message : 'Failed to load library');
+      })
+      .finally(() => {
+        if (!cancelled) setLibraryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshLibrary]);
 
   const getTabCounts = () => ({
-    recent: mockGames.filter(g => g.category === 'recent').length,
-    favorite: mockGames.filter(g => g.category === 'favorite').length,
-    wishlist: mockGames.filter(g => g.category === 'wishlist').length,
-    completed: mockCompletedGames.length,
-    duds: 1 // Mock data - renamed from letdowns
+    recent: libraryGames.filter((g) => g.category === 'recent').length,
+    favorite: libraryGames.filter((g) => g.category === 'favorite').length,
+    wishlist: libraryGames.filter((g) => g.category === 'wishlist').length,
+    completed: libraryGames.filter((g) => g.category === 'completed').length,
+    duds: libraryGames.filter((g) => g.category === 'dud').length,
   });
 
-  const getFilteredGames = () => {
+  const getFilteredUiGames = (): UiGame[] => {
+    const q = sidebarSearchQuery.toLowerCase();
+    const match = (g: LibraryGame) => g.name.toLowerCase().includes(q);
+
     if (activeCategory === 'completed') {
-      if (activeTab === 'favorite') {
-        const favCompletedGames = mockCompletedGames.filter(g => g.category === 'completed');
-        return favCompletedGames.filter(game => 
-          game.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-        );
-      } else if (activeTab === 'completed') {
-        return mockCompletedGames.filter(game => 
-          game.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-        );
-      } else if (activeTab === 'duds') {
-        // Mock dud games
-        return [mockCompletedGames[2]].filter(game => 
-          game.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-        );
+      if (activeTab === 'completed' || activeTab === 'favorite') {
+        return libraryGames.filter((g) => g.category === 'completed' && match(g)).map(apiGameToUiGame);
       }
-    } else {
-      const filtered = mockGames.filter(game => 
-        game.category === activeTab && 
-        game.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase())
-      );
-      return filtered;
+      if (activeTab === 'duds') {
+        return libraryGames.filter((g) => g.category === 'dud' && match(g)).map(apiGameToUiGame);
+      }
+      return [];
     }
-    return [];
+    return libraryGames
+      .filter((g) => g.category === activeTab && match(g))
+      .map(apiGameToUiGame);
   };
 
   const getAvailableTabs = () => {
@@ -442,57 +287,114 @@ export default function App() {
       return [
         { id: 'completed', label: 'Done', icon: Trophy, color: 'green-600' },
         { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
-        { id: 'duds', label: 'Duds', icon: ThumbsDown, color: 'letdowns' }
-      ];
-    } else {
-      return [
-        { id: 'recent', label: 'Recent', icon: Clock, color: 'secondary' },
-        { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
-        { id: 'wishlist', label: 'List', icon: Bookmark, color: 'accent' }
+        { id: 'duds', label: 'Duds', icon: ThumbsDown, color: 'letdowns' },
       ];
     }
+    return [
+      { id: 'recent', label: 'Recent', icon: Clock, color: 'secondary' },
+      { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
+      { id: 'wishlist', label: 'List', icon: Bookmark, color: 'accent' },
+    ];
   };
 
-  const getRecentGames = () => {
-    return mockGames.filter(g => g.category === 'recent').slice(0, 3);
-  };
+  const getRecentGames = (): UiGame[] =>
+    libraryGames.filter((g) => g.category === 'recent').slice(0, 3).map(apiGameToUiGame);
 
-  const handleGameClick = (game: any) => {
-    console.log('🎮 Game selected:', game.title);
+  const handleGameClick = (game: UiGame) => {
     setSelectedGame(game);
   };
 
   const handleBackToMain = () => {
-    console.log('⬅️ Returning to main page');
     setSelectedGame(null);
   };
 
-  const handleSearchSelect = (game: any) => {
-    console.log('🎯 Search result selected:', game.title);
-    setSearchQuery(game.title);
-    setShowSearchSuggestions(false);
-    handleGameClick(game);
+  const openIgdbPreview = (g: IgdbGame) => {
+    setSearchQuery(g.name);
+    setIgdbPreview(g);
   };
 
-  const handleSaveJournalEntry = (entry: any) => {
-    console.log('💾 Journal entry saved to main app:', entry);
-    setJournalEntries(prev => [entry, ...prev]);
-  };
-
-  const handleReadFullEntry = () => {
-    console.log('📖 Read full entry clicked - navigating to game journal');
-    const entry = journalEntries[0];
-    const allGames = [...mockGames, ...mockCompletedGames];
-    const game = allGames.find(g => g.title === entry.game);
-    if (game) {
-      handleGameClick(game);
-    } else {
-      console.warn('⚠️ Game not found for entry:', entry.game);
+  const addIgdbGameFromModal = async (g: IgdbGame) => {
+    try {
+      const saved = await postGame(igdbToNewLibraryGame(g));
+      setLibraryGames((prev) => mergeGame(prev, saved));
+      handleGameClick(apiGameToUiGame(saved));
+    } catch (e) {
+      console.error(e);
+      setLibraryError(e instanceof Error ? e.message : 'Could not add game to library');
+      throw e;
     }
   };
 
+  const openJournalFromIgdbPreview = () => {
+    if (!igdbPreview) return;
+    const row = libraryGames.find((x) => x.igdbId === igdbPreview.id);
+    if (row) handleGameClick(apiGameToUiGame(row));
+  };
+
+  const persistJournalEntry = async (game: UiGame, payload: NewJournalEntryPayload) => {
+    const entry = await createEntry({
+      gameId: game.id,
+      title: payload.title,
+      entryDate: payload.entryDate,
+      areaExplored: payload.areaExplored,
+      bossDefeated: payload.bossDefeated,
+      itemFound: payload.itemFound,
+      screenshotUrl: payload.screenshotUrl,
+      notes: payload.notes,
+      mood: payload.mood,
+      sessionLength: payload.sessionLength,
+      progressAtEntry: payload.progressAtEntry,
+      tags: payload.tags,
+    });
+    setLibraryEntries((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
+
+    const progress =
+      payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
+        ? payload.progressAtEntry
+        : game.progress;
+    if (progress !== game.progress) {
+      const updated = await patchGame(game.id, { progress });
+      setLibraryGames((prev) => mergeGame(prev, updated));
+      setSelectedGame((sg) => (sg && sg.id === game.id ? apiGameToUiGame(updated) : sg));
+    }
+  };
+
+  const handleSaveJournalEntryFromDashboard = async (payload: NewJournalEntryPayload) => {
+    const recent = getRecentGames()[0];
+    const fallback = libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null;
+    const target = recent ?? fallback;
+    if (!target) {
+      setLibraryError('Add a game to your library before creating an entry.');
+      return;
+    }
+    await persistJournalEntry(target, payload);
+  };
+
+  const handleSaveJournalEntryForSelectedGame = async (payload: NewJournalEntryPayload) => {
+    if (!selectedGame) return;
+    await persistJournalEntry(selectedGame, payload);
+  };
+
+  const sortedDashboardEntries = useMemo(
+    () => [...libraryEntries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)),
+    [libraryEntries]
+  );
+
+  const latestEntry =
+    sortedDashboardEntries.length > 0
+      ? apiEntryToDashboard(
+          sortedDashboardEntries[0],
+          gameTitleById.get(sortedDashboardEntries[0].gameId) ?? 'Unknown game'
+        )
+      : null;
+
+  const handleReadFullEntry = () => {
+    if (!latestEntry) return;
+    const row = libraryGames.find((g) => g.igdbId === latestEntry.gameId);
+    if (row) handleGameClick(apiGameToUiGame(row));
+  };
+
   const handleStatCardClick = (statType: string) => {
-    console.log('📊 Stat card clicked:', statType);
     if (statType === 'completed') {
       setActiveCategory('completed');
       setActiveTab('completed');
@@ -503,22 +405,26 @@ export default function App() {
   };
 
   const handleScreenshotClick = (screenshot: string) => {
-    console.log('🖼️ Opening screenshot modal:', screenshot);
     setScreenshotModal(screenshot);
   };
 
   const getMoodColor = (mood: string) => {
     switch (mood) {
-      case 'excited': return 'bg-secondary/20 text-secondary';
-      case 'satisfied': return 'bg-accent/20 text-accent';
-      case 'neutral': return 'bg-neutral/20 text-neutral';
-      case 'emotional': return 'bg-primary/20 text-primary';
-      case 'frustrated': return 'bg-destructive/20 text-destructive';
-      default: return 'bg-accent/20 text-accent';
+      case 'excited':
+        return 'bg-secondary/20 text-secondary';
+      case 'satisfied':
+        return 'bg-accent/20 text-accent';
+      case 'neutral':
+        return 'bg-neutral/20 text-neutral';
+      case 'emotional':
+        return 'bg-primary/20 text-primary';
+      case 'frustrated':
+        return 'bg-destructive/20 text-destructive';
+      default:
+        return 'bg-accent/20 text-accent';
     }
   };
 
-  // Update active tab when category changes
   useEffect(() => {
     if (activeCategory === 'completed') {
       setActiveTab('completed');
@@ -527,32 +433,32 @@ export default function App() {
     }
   }, [activeCategory]);
 
-  useEffect(() => {
-    console.log('🔍 Search query changed:', searchQuery);
-    const timer = setTimeout(() => {
-      setShowSearchSuggestions(searchQuery.length > 0);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    console.log('🏷️ Tab changed to:', activeTab, 'Category:', activeCategory);
-  }, [activeTab, activeCategory]);
+  const entriesForSelectedGame = useMemo(() => {
+    if (!selectedGame) return [];
+    return libraryEntries.filter((e) => e.gameId === selectedGame.id);
+  }, [libraryEntries, selectedGame]);
 
   if (selectedGame) {
-    return <JournalPage game={selectedGame} onBack={handleBackToMain} />;
+    return (
+      <JournalPage
+        game={selectedGame}
+        onBack={handleBackToMain}
+        entries={entriesForSelectedGame}
+        onSaveEntry={handleSaveJournalEntryForSelectedGame}
+      />
+    );
   }
 
   const tabCounts = getTabCounts();
-  const totalHours = mockGames.reduce((sum, game) => sum + game.hoursPlayed, 0);
-  const weeklyHours = 23; // Self-reported weekly hours
-  const gamesPlayedThisWeek = 4; // Mock data - games played this week
-  const latestEntry = journalEntries[0];
-  const activeStreaks = mockGames.filter(g => g.streak > 0).length;
+  const inProgressCount = libraryGames.filter((g) =>
+    ['recent', 'favorite', 'wishlist'].includes(g.category)
+  ).length;
+  const totalHours = libraryGames.reduce((sum, game) => sum + (game.hoursPlayed ?? 0), 0);
+  const weeklyHours = '—';
+  const gamesPlayedThisWeek = '—';
+  const activeStreaks = 0;
   const availableTabs = getAvailableTabs();
-
-  console.log('🏠 Main app rendered, total games:', mockGames.length, 'total hours:', totalHours);
+  const modalGame: UiGame | null = getRecentGames()[0] ?? (libraryGames[0] ? apiGameToUiGame(libraryGames[0]) : null);
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -576,7 +482,7 @@ export default function App() {
           >
             <Target className="w-4 h-4 mx-auto mb-1 text-secondary" />
             <p className="text-xs text-muted-foreground">In Progress</p>
-            <p className="text-secondary">8</p>
+            <p className="text-secondary">{inProgressCount}</p>
           </div>
           <div 
             onClick={() => handleStatCardClick('completed')}
@@ -628,6 +534,7 @@ export default function App() {
                       }`}>
                         {tab.id === 'completed' ? tabCounts.completed : 
                          tab.id === 'duds' ? tabCounts.duds :
+                         tab.id === 'favorite' && activeCategory === 'completed' ? tabCounts.completed :
                          tab.id === 'favorite' ? tabCounts.favorite :
                          tab.id === 'recent' ? tabCounts.recent :
                          tabCounts.wishlist}
@@ -693,10 +600,10 @@ export default function App() {
           
           {!isCollapsed && (
             <div className="space-y-2 pb-4">
-              {getFilteredGames().map(game => (
+              {getFilteredUiGames().map((game) => (
                 <SidebarGameCard key={game.id} game={game} onClick={() => handleGameClick(game)} />
               ))}
-              {getFilteredGames().length === 0 && (
+              {getFilteredUiGames().length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
                   <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p>No {activeTab} games found</p>
@@ -743,7 +650,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-accent" />
                   <span className="text-muted-foreground">This Week:</span>
-                  <span className="text-accent">{weeklyHours}h</span>
+                  <span className="text-accent">{weeklyHours === '—' ? weeklyHours : `${weeklyHours}h`}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Gamepad2 className="w-4 h-4 text-primary" />
@@ -758,7 +665,7 @@ export default function App() {
               <div className="journal-card z-depth-1 rounded-lg p-4 text-center min-w-[100px]">
                 <Flame className="w-5 h-5 mx-auto mb-1 text-destructive" />
                 <p className="text-xs text-muted-foreground">Daily Streak</p>
-                <p className="text-destructive">🔥 7</p>
+                <p className="text-destructive">—</p>
               </div>
               <div className="journal-card z-depth-1 rounded-lg p-4 text-center min-w-[100px]">
                 <Star className="w-5 h-5 mx-auto mb-1 text-secondary" />
@@ -772,6 +679,14 @@ export default function App() {
         {/* Main Content */}
         <div className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-6xl mx-auto space-y-8">
+            {libraryLoading && (
+              <p className="text-sm text-muted-foreground text-center">Loading your library…</p>
+            )}
+            {libraryError && (
+              <p className="text-sm text-destructive text-center" role="alert">
+                {libraryError}
+              </p>
+            )}
             {/* IGDB Game Browser - Scaled Down */}
             <div className="igdb-search-section rounded-lg p-5 z-depth-2">
               <div className="text-center mb-5">
@@ -788,10 +703,7 @@ export default function App() {
                   payloadMode="json"              // <<— send {query:"..."} JSON
                   value={searchQuery}
                   onChange={setSearchQuery}
-                  onSelect={(g: IgdbGame) => {
-                    setSearchQuery(g.name);
-                    handleGameClick(mapIgdbToCard(g));
-                  }}
+                  onSelect={(g: IgdbGame) => openIgdbPreview(g)}
                 />
 
               </div>
@@ -811,6 +723,12 @@ export default function App() {
               <div className="lg:col-span-3">
                 <h3 className="text-2xl text-primary readable-accent mb-6">Recent Games</h3>
                 <div className="space-y-6">
+                  {getRecentGames().length === 0 && !libraryLoading && (
+                    <p className="text-sm text-muted-foreground">
+                      No recent games yet — add one from IGDB search or change a game&apos;s category in the
+                      API/database.
+                    </p>
+                  )}
                   {getRecentGames().map((game, index) => (
                     <MainGameCard 
                       key={game.id} 
@@ -839,7 +757,24 @@ export default function App() {
                 </div>
                 
                 <div className="journal-card z-depth-3 vhs-glow rounded-lg p-6 space-y-4">
-                  {/* Entry Header with Screenshot */}
+                  {!latestEntry ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No journal entries yet. Use New after you have at least one game in your library.
+                    </p>
+                  ) : (
+                    <>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleReadFullEntry}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleReadFullEntry();
+                      }
+                    }}
+                    className="rounded-lg -m-2 p-2 cursor-pointer hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 smooth-transition space-y-4 text-left w-full"
+                  >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-16 flex-shrink-0">
                       {latestEntry.screenshot ? (
@@ -847,7 +782,10 @@ export default function App() {
                           src={latestEntry.screenshot}
                           alt="Session screenshot"
                           className="w-full h-full object-cover rounded border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 smooth-transition"
-                          onClick={() => handleScreenshotClick(latestEntry.screenshot!)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleScreenshotClick(latestEntry.screenshot!);
+                          }}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                             e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -872,7 +810,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Quick Stats */}
                   <div className="grid grid-cols-3 gap-2">
                     {latestEntry.areaExplored && (
                       <div className="bg-muted/20 rounded-lg p-2 text-center">
@@ -897,7 +834,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Content Preview with Inline Expansion */}
                   <div className="space-y-3">
                     <div className={`journal-text text-sm leading-relaxed smooth-transition ${
                       entryExpanded ? 'expanded-content' : 'collapsed-content'
@@ -905,7 +841,6 @@ export default function App() {
                       <p>{latestEntry.content}</p>
                     </div>
 
-                    {/* Tags */}
                     <div className="flex flex-wrap gap-2">
                       {latestEntry.tags.map((tag, index) => (
                         <span
@@ -921,7 +856,6 @@ export default function App() {
                       ))}
                     </div>
 
-                    {/* Mood */}
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Mood:</span>
                       <span className={`px-2 py-1 rounded-full text-xs ${getMoodColor(latestEntry.mood)}`}>
@@ -930,13 +864,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Inline Expand/Navigate */}
-                  <div className="pt-3 border-t border-border/50 flex items-center justify-between">
+                  <div
+                    className="pt-3 border-t border-border/50 flex items-center justify-start"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button 
-                      onClick={() => {
-                        console.log('🔽 Toggling entry expansion');
-                        setEntryExpanded(!entryExpanded);
-                      }}
+                      type="button"
+                      onClick={() => setEntryExpanded(!entryExpanded)}
                       className="text-sm text-primary hover:text-primary/80 fast-transition flex items-center gap-1"
                     >
                       {entryExpanded ? (
@@ -951,19 +885,29 @@ export default function App() {
                         </>
                       )}
                     </button>
-                    <button 
-                      onClick={handleReadFullEntry}
-                      className="text-sm text-primary hover:text-primary/80 fast-transition"
-                    >
-                      View in Journal →
-                    </button>
                   </div>
+                  </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <IgdbGameDetailModal
+        game={igdbPreview}
+        inLibrary={igdbPreview != null && libraryGames.some((x) => x.igdbId === igdbPreview.id)}
+        libraryListPrice={
+          igdbPreview
+            ? libraryGames.find((x) => x.igdbId === igdbPreview.id)?.listPrice ?? null
+            : null
+        }
+        onClose={() => setIgdbPreview(null)}
+        onAddToLibrary={addIgdbGameFromModal}
+        onOpenJournal={openJournalFromIgdbPreview}
+      />
 
       {/* Screenshot Modal */}
       {screenshotModal && (
@@ -988,12 +932,9 @@ export default function App() {
       {/* Journal Entry Modal */}
       <JournalEntryModal
         isOpen={showJournalModal}
-        onClose={() => {
-          console.log('❌ Closing journal modal from main page');
-          setShowJournalModal(false);
-        }}
-        onSave={handleSaveJournalEntry}
-        game={getRecentGames()[0] || mockGames[0]}
+        onClose={() => setShowJournalModal(false)}
+        onSave={handleSaveJournalEntryFromDashboard}
+        game={modalGame}
       />
     </div>
   );

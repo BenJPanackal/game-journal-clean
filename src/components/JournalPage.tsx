@@ -1,63 +1,33 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Calendar, Clock, Star, Trophy, Heart, Bookmark, Plus, ChevronDown, ChevronUp, X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, Calendar, Clock, Star, Trophy, Plus, ChevronDown, ChevronUp, X, DollarSign } from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
+import type { NewJournalEntryPayload } from '../lib/libraryUi';
+import { apiEntryToJournalRow, formatListPriceUsd } from '../lib/libraryUi';
+import type { LibraryEntry } from '../api/library';
+import type { UiGame } from '../lib/libraryUi';
 
 interface JournalPageProps {
-  game: any;
+  game: UiGame;
   onBack: () => void;
+  entries: LibraryEntry[];
+  onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void>;
 }
 
-const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
+const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSaveEntry }) => {
   const [showJournalModal, setShowJournalModal] = useState(false);
-  const [expandedEntries, setExpandedEntries] = useState<Set<number>>(new Set());
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
-  
-  const [journalEntries, setJournalEntries] = useState([
-    {
-      id: 1,
-      date: "2024-01-15",
-      title: "Epic Boss Fight in Cyberpunk 2077",
-      content: "Just defeated Adam Smasher after what felt like hours of preparation. The build-up to this fight was incredible - all the choices I made throughout the game led to this moment. Used my netrunner build with legendary quickhacks and it was devastating. The visual effects during the final sequence were absolutely stunning. This game continues to surprise me with its depth and storytelling. The way the story culminated in this final confrontation was masterfully done. Every side quest, every character interaction, every upgrade choice led to this moment where I felt truly prepared and invested in the outcome.",
-      sessionLength: "4h 30m",
-      mood: "excited",
-      areaExplored: "Arasaka Tower",
-      bossDefeated: "Adam Smasher", 
-      itemFound: "Legendary Quickhack",
-      tags: ["Boss Fight", "Story Beat", "Epic Moment"],
-      achievements: ["Mind Over Matter", "Legend of Night City"],
-      screenshot: "https://images.unsplash.com/photo-1580234820958-493f3681d1e4?w=400&h=300&fit=crop"
-    },
-    {
-      id: 2,
-      date: "2024-01-14", 
-      title: "The Heist Goes Wrong",
-      content: "Holy shit. I was not prepared for that emotional gut punch. Jackie... man, I'm actually tearing up thinking about it. The writing in this game is phenomenal. Keanu Reeves as Johnny Silverhand is perfect casting - his presence is both menacing and magnetic. The glitching effects when he appears are so well done. I need to process what just happened before continuing.",
-      sessionLength: "4h 12m",
-      mood: "emotional",
-      achievements: ["Point of No Return", "Silverhand's Shadow"]
-    },
-    {
-      id: 3,
-      date: "2024-01-13",
-      title: "Side Quests and Character Building",
-      content: "Taking a break from the main story to explore the world more. Did some side gigs with Regina Jones - the variety is impressive. Found some amazing gear and finally got my hands on a decent katana. The combat is starting to click, especially the quickhacks. Breach protocol mini-game is addictive. Night City feels more like home now.",
-      sessionLength: "5h 20m", 
-      mood: "satisfied",
-      achievements: ["Hack the System", "Blade Master"]
-    }
-  ]);
+
+  const journalRows = useMemo(
+    () => [...entries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map(apiEntryToJournalRow),
+    [entries]
+  );
 
   const progressGradient = game.progress > 0 ? 
     `linear-gradient(90deg, ${game.colors.primary}, ${game.colors.secondary})` : 
     'none';
 
-  const handleSaveJournalEntry = (entry: any) => {
-    console.log('💾 New journal entry saved to game page:', entry);
-    setJournalEntries(prev => [entry, ...prev]);
-  };
-
-  const toggleEntryExpansion = (entryId: number) => {
-    console.log('📖 Toggling expansion for entry:', entryId);
+  const toggleEntryExpansion = (entryId: string) => {
     setExpandedEntries(prev => {
       const newSet = new Set(prev);
       if (newSet.has(entryId)) {
@@ -84,8 +54,6 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
       default: return 'bg-accent/20 text-accent';
     }
   };
-
-  console.log('🎮 Journal page loaded for:', game.title);
 
   return (
     <div className="min-h-screen bg-background">
@@ -127,6 +95,10 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     Last played: {game.lastPlayed}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="w-4 h-4" />
+                    Price: {formatListPriceUsd(game.listPrice)}
                   </span>
                 </div>
               </div>
@@ -180,7 +152,13 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
             </button>
           </div>
 
-          {journalEntries.map((entry, index) => {
+          {journalRows.length === 0 && (
+            <p className="text-sm text-muted-foreground py-8 text-center border border-dashed border-border/60 rounded-lg">
+              No entries yet — use New Entry to log a session.
+            </p>
+          )}
+
+          {journalRows.map((entry, index) => {
             const isExpanded = expandedEntries.has(entry.id);
             const isLatest = index === 0;
             
@@ -241,7 +219,7 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
                       {entry.title}
                     </h4>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <span>{entry.game || game.title}</span>
+                      <span>{game.title}</span>
                       <span>•</span>
                       <span>{new Date(entry.date).toLocaleDateString()}</span>
                     </div>
@@ -367,7 +345,7 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack }) => {
           console.log('❌ Closing journal modal from journal page');
           setShowJournalModal(false);
         }}
-        onSave={handleSaveJournalEntry}
+        onSave={onSaveEntry}
         game={game}
       />
     </div>
