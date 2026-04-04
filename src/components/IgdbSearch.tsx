@@ -16,11 +16,23 @@ export type IgdbGame = {
   platforms?: string[];
   screenshotUrls?: string[];
 
-  /** CheapShark-derived (USD), from game-details merge / proxy */
-  cheapsharkDealUsd?: number | null;
-  cheapsharkRetailUsd?: number | null;
-  cheapsharkHistoricLowUsd?: number | null;
-  cheapsharkMatchedTitle?: string | null;
+  /** IGDB external_games (store IDs / URLs) */
+  externalGames?: {
+    uid: string | null;
+    url: string | null;
+    name: string | null;
+    sourceName: string | null;
+    sourceId: number | null;
+  }[];
+  /** Live Steam shelf price when IGDB links a Steam app id (Valve appdetails, US region). */
+  steamPrice?: {
+    currency: string;
+    final: number;
+    initial: number;
+    discountPercent: number;
+    finalFormatted: string;
+    initialFormatted: string;
+  } | null;
 
   // raw-IGDB
   first_release_date?: number;

@@ -53,14 +53,11 @@ export function igdbReleaseYear(g: IgdbGame): number | undefined {
   return undefined;
 }
 
-function cheapsharkListPriceUsd(g: IgdbGame): number | null {
-  if (typeof g.cheapsharkRetailUsd === 'number' && Number.isFinite(g.cheapsharkRetailUsd)) {
-    return g.cheapsharkRetailUsd;
-  }
-  if (typeof g.cheapsharkDealUsd === 'number' && Number.isFinite(g.cheapsharkDealUsd)) {
-    return g.cheapsharkDealUsd;
-  }
-  return null;
+/** Prefer Steam final price (USD) when game-details returned Valve data linked from IGDB. */
+function igdbLinkedSteamListPriceUsd(g: IgdbGame): number | null {
+  const sp = g.steamPrice;
+  if (!sp || !Number.isFinite(sp.final)) return null;
+  return sp.final;
 }
 
 /** Build POST /api/games body when adding from IGDB (new library row). */
@@ -75,7 +72,7 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
   listPrice?: number | null;
 } {
   const year = igdbReleaseYear(g);
-  const listPrice = cheapsharkListPriceUsd(g);
+  const listPrice = igdbLinkedSteamListPriceUsd(g);
   return {
     igdbId: g.id,
     name: g.name,

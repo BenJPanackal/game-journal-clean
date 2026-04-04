@@ -87,6 +87,7 @@ export default function IgdbGameDetailModal({
   const genres = merged.genres ?? [];
   const platforms = merged.platforms ?? [];
   const shots = merged.screenshotUrls ?? [];
+  const externalGames = merged.externalGames ?? [];
   const summary = merged.summary?.trim() ?? '';
   const summaryLong = summary.length > 280;
   const summaryShown =
@@ -123,34 +124,33 @@ export default function IgdbGameDetailModal({
               {year != null && (
                 <p className="text-sm text-muted-foreground mt-1">Release year: {year}</p>
               )}
-              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+              <div className="mt-2 space-y-2 text-sm text-muted-foreground">
                 <p className="flex items-start gap-1.5">
                   <DollarSign className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
                   <span>
                     <span className="text-xs uppercase tracking-wide text-muted-foreground/90 block mb-0.5">
-                      Store deals (CheapShark)
+                      Price
                     </span>
-                    <span className="text-foreground">
-                      Best current: {formatListPriceUsd(merged.cheapsharkDealUsd ?? null)}
+                    <span className="text-[11px] block opacity-80 mb-1">
+                      IGDB does not publish MSRP. When IGDB links a Steam app, we show the current Steam Store
+                      price (US region, Valve JSON API).
                     </span>
-                    {merged.cheapsharkRetailUsd != null && (
-                      <span className="block text-xs mt-0.5">
-                        Typical retail: {formatListPriceUsd(merged.cheapsharkRetailUsd)}
+                    {merged.steamPrice ? (
+                      <span className="text-foreground block">
+                        <span className="font-medium text-lg">{merged.steamPrice.finalFormatted || formatListPriceUsd(merged.steamPrice.final)}</span>
+                        {merged.steamPrice.discountPercent > 0 && merged.steamPrice.initialFormatted && (
+                          <span className="block text-xs mt-0.5 line-through opacity-70">
+                            {merged.steamPrice.initialFormatted}
+                          </span>
+                        )}
+                        {merged.steamPrice.discountPercent > 0 && (
+                          <span className="ml-2 text-xs text-secondary">-{merged.steamPrice.discountPercent}%</span>
+                        )}
                       </span>
-                    )}
-                    {merged.cheapsharkHistoricLowUsd != null && (
-                      <span className="block text-xs mt-0.5">
-                        Historic low: {formatListPriceUsd(merged.cheapsharkHistoricLowUsd)}
-                      </span>
-                    )}
-                    {merged.cheapsharkDealUsd == null &&
-                      merged.cheapsharkRetailUsd == null &&
-                      merged.cheapsharkHistoricLowUsd == null && (
-                        <span className="text-xs">No deal data for this title right now.</span>
-                      )}
-                    {merged.cheapsharkMatchedTitle && merged.cheapsharkMatchedTitle !== merged.name && (
-                      <span className="block text-[11px] opacity-70 mt-1">
-                        Matched store listing: {merged.cheapsharkMatchedTitle}
+                    ) : (
+                      <span className="text-xs">
+                        No Steam listing linked in IGDB for this title, or Steam did not return a price (free /
+                        unreleased / regional).
                       </span>
                     )}
                   </span>
@@ -175,7 +175,7 @@ export default function IgdbGameDetailModal({
 
         <div className="p-4 space-y-5">
           {detailLoading && (
-            <p className="text-xs text-muted-foreground">Loading genres, platforms, and screenshots…</p>
+            <p className="text-xs text-muted-foreground">Loading genres, platforms, screenshots, and store links…</p>
           )}
           {detailErr && (
             <p className="text-xs text-amber-500/90" role="status">
@@ -233,6 +233,31 @@ export default function IgdbGameDetailModal({
             </div>
           )}
 
+          {externalGames.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Store links (IGDB)</p>
+              <ul className="space-y-1.5 text-sm">
+                {externalGames.map((eg, i) => (
+                  <li key={`${eg.sourceName}-${eg.uid}-${i}`} className="flex flex-wrap gap-x-2 items-baseline">
+                    <span className="text-muted-foreground shrink-0">{eg.sourceName || 'Store'}:</span>
+                    {eg.url ? (
+                      <a
+                        href={eg.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline break-all"
+                      >
+                        {eg.name?.trim() || eg.url}
+                      </a>
+                    ) : (
+                      <span className="readable-text tabular-nums">ID {eg.uid ?? '—'}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {summary && (
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
@@ -251,7 +276,11 @@ export default function IgdbGameDetailModal({
             </div>
           )}
 
-          {!summary && genres.length === 0 && platforms.length === 0 && shots.length === 0 && (
+          {!summary &&
+            genres.length === 0 &&
+            platforms.length === 0 &&
+            shots.length === 0 &&
+            externalGames.length === 0 && (
             <p className="text-sm text-muted-foreground">
               IGDB did not return extra details for this title. You can still add it to your library.
             </p>

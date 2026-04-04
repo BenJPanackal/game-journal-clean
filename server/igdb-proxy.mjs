@@ -8,7 +8,7 @@ import cors from 'cors';
 import axios from 'axios';
 import { openDatabase } from './db.mjs';
 import { createLibraryRouter } from './library-routes.mjs';
-import { fetchCheapSharkPricing } from './cheapshark.mjs';
+import { fetchSteamStorePriceOverview } from './steam-store-price.mjs';
 
 const app = express();
 
@@ -88,8 +88,32 @@ function simplifySearchGame(g) {
   };
 }
 
-/** Full card / detail modal */
-function simplifyDetailGame(g) {
+function simplifyExternalGames(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => ({
+      uid: x?.uid != null ? String(x.uid) : null,
+      url: x?.url != null ? String(x.url) : null,
+      name: x?.name != null ? String(x.name) : null,
+      sourceName: x?.external_game_source?.name != null ? String(x.external_game_source.name) : null,
+      sourceId: x?.external_game_source?.id != null ? Number(x.external_game_source.id) : null,
+    }))
+    .filter((x) => x.url || x.uid);
+}
+
+function findSteamExternalGame(externalGames) {
+  for (const eg of externalGames) {
+    const n = (eg.sourceName || '').toLowerCase();
+    if (n.includes('steam') || eg.sourceId === 1) {
+      const uid = eg.uid != null ? String(eg.uid).trim() : '';
+      if (/^\d+$/.test(uid)) return { ...eg, steamAppId: Number(uid) };
+    }
+  }
+  return null;
+}
+
+/** Full card / detail modal — IGDB has no MSRP fields; we attach external store links + optional Steam live price. */
+function simplifyDetailGame(g, steamPrice = null) {
   const genres = Array.isArray(g.genres)
     ? g.genres.map((x) => x?.name).filter(Boolean)
     : [];
@@ -102,24 +126,24 @@ function simplifyDetailGame(g) {
         .map((s) => coverUrlFromImageId(s?.image_id, 't_screenshot_med'))
         .filter(Boolean)
     : [];
-  const pricing = g._cheapshark || null;
+  const externalGames = simplifyExternalGames(g.external_games);
   return {
     ...simplifySearchGame(g),
     summary: g.summary ?? null,
     genres,
     platforms,
     screenshotUrls,
-    cheapsharkDealUsd: pricing?.currentDealUsd ?? null,
-    cheapsharkRetailUsd: pricing?.retailUsd ?? null,
-    cheapsharkHistoricLowUsd: pricing?.historicLowUsd ?? null,
-    cheapsharkMatchedTitle: pricing?.matchedTitle ?? null,
+    externalGames,
+    steamPrice,
   };
 }
 
 const IGDB_SEARCH_FIELDS = 'id,name,first_release_date,cover.image_id';
 
 const IGDB_DETAIL_FIELDS =
-  'id,name,first_release_date,summary,cover.image_id,genres.name,platforms.name,screenshots.image_id';
+  'id,name,first_release_date,summary,cover.image_id,genres.name,platforms.name,screenshots.image_id,' +
+  'external_games.uid,external_games.url,external_games.name,' +
+  'external_games.external_game_source.name,external_games.external_game_source.id';
 
 // --- Health endpoint to quickly verify env + token
 app.get('/api/igdb/health', async (req, res) => {
@@ -226,40 +250,37 @@ async function handleSearch(req, res) {
 app.post('/api/igdb/search', requireIgdb, handleSearch);
 app.post('/api/igdb/games/search', requireIgdb, handleSearch);
 
-/** One game by IGDB id — genres, platforms, screenshots + CheapShark pricing (parallel fetches). */
+/** One game by IGDB id — genres, platforms, screenshots, external store links, optional Steam price (via Steam app id from IGDB). */
 app.post('/api/igdb/game-details', requireIgdb, async (req, res) => {
   const id = Number(req.body?.id);
-  const hintName = (req.body?.name ?? '').toString().trim();
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: 'id must be a positive integer' });
   }
   try {
     const token = await getAccessToken();
-    const [igdbRes, pricing] = await Promise.all([
-      axios.post(
-        'https://api.igdb.com/v4/games',
-        `where id = ${id};
+    const igdbRes = await axios.post(
+      'https://api.igdb.com/v4/games',
+      `where id = ${id};
 fields ${IGDB_DETAIL_FIELDS};
 limit 1;`,
-        {
-          headers: {
-            'Client-ID': TWITCH_CLIENT_ID,
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-            'Content-Type': 'text/plain',
-          },
-        }
-      ),
-      fetchCheapSharkPricing(hintName),
-    ]);
+      {
+        headers: {
+          'Client-ID': TWITCH_CLIENT_ID,
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          'Content-Type': 'text/plain',
+        },
+      }
+    );
     const row = igdbRes.data?.[0];
     if (!row) return res.status(404).json({ error: 'Game not found' });
-    const titleForPrice = hintName || row.name || '';
-    const priceData =
-      pricing ||
-      (titleForPrice ? await fetchCheapSharkPricing(titleForPrice) : null);
-    row._cheapshark = priceData;
-    res.json({ game: simplifyDetailGame(row) });
+    const externalGames = simplifyExternalGames(row.external_games);
+    const steamEg = findSteamExternalGame(externalGames);
+    let steamPrice = null;
+    if (steamEg?.steamAppId) {
+      steamPrice = await fetchSteamStorePriceOverview(steamEg.steamAppId);
+    }
+    res.json({ game: simplifyDetailGame(row, steamPrice) });
   } catch (err) {
     const status = err?.response?.status || 500;
     const data = err?.response?.data || err.message;

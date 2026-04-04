@@ -19,7 +19,7 @@ flowchart TB
   subgraph node [Node local server]
     API[REST /api/library games entries]
     Store[(data/journal.sqlite)]
-    IGDBProxy[IGDB + CheapShark routes]
+    IGDBProxy[IGDB + Steam price helper routes]
   end
   UI --> Ctx
   Ctx -->|fetch /api| API
@@ -35,7 +35,7 @@ flowchart TB
 
 - **SQLite** schema for **games** (categories, progress, ratings, list price, etc.) and **journal entries**.
 - **REST API** — `GET /api/library`, CRUD for `/api/games` and `/api/entries` (see `server/library-routes.mjs`).
-- **IGDB** search, game details, health check; optional **CheapShark** pricing hints on details.
+- **IGDB** search, game details, health check; **store links from IGDB** and **Steam Store** live price when IGDB links a Steam app id (US region, Valve JSON API).
 - **React UI** wired to real data (library, journal, IGDB detail flows — see `src/`).
 
 ## Getting started (short)
