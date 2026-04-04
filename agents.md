@@ -26,8 +26,24 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 - **Journal entries** with session details; **narrative / story-game** focus; **neon-style UI** — already largely acceptable; **polish can wait** until core behavior is real.
 - **Repo today:** Vite + React (**not Electron**). Browsers cannot write arbitrary files on disk — extend the **Node** server (`server/igdb-proxy.mjs` or a merged `server/index.mjs`) with **REST** that reads/writes the DB.
 - **“Real-time” in the UI:** after each successful API mutation, update React state (context / query) so lists and counts refresh immediately **without** a full reload.
-- **Developers:** clone + lockfile + `.env` / `.env.example` + documented `npm ci` → configure env → `npm run build` → `npm start` (when production server exists). Pin **Node** (`engines` / `.nvmrc`) for repeatable installs.
+- **Developers:** clone + lockfile + `.env` / `.env.example` + documented `npm ci` → configure env → **`npm run dev`** (or **`npm run build`** + API on 3001 + **`npm run preview`** until **`npm start`** exists). Pin **Node** (`engines` / `.nvmrc`) when ready.
 - **Single process:** design so **one Node process** can serve **`dist/`** plus `/api` and IGDB (and SQLite-backed REST) for production and for a future desktop shell.
+
+## Current codebase snapshot (keep in sync when architecture changes)
+
+**Process entry:** `node server/igdb-proxy.mjs` — single Express app, default **`PORT=3001`** (override in `.env`). Dotenv: `.env.local` then `.env`.
+
+**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Game columns include **`user_rating`** (0–10 or NULL), **`list_price`**, **`completion_memory`**, plus category / progress / dates / cover / name. Entries store mood, notes, tags as **`tags_json`**, optional **`progress_at_entry`**, etc. Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`** for new columns.
+
+**Library API:** `server/library-routes.mjs` mounted at **`/api`** — `GET /library` (games + entries bootstrap), `GET|POST /api/games`, **`PATCH|DELETE /api/games/:igdbId`**, `GET|POST /api/entries`, **`PATCH|DELETE /api/entries/:id`**. **PATCH game rule:** if **`progress` reaches 100** while category is still **`recent` | `favorite` | `wishlist`**, server requires **`userRating`** in **1–10** (or rejects); on success it sets **`category: completed`** and **`completed_date`** when missing.
+
+**IGDB + pricing:** Same Express app. **`requireIgdb`** gates search/detail; missing Twitch env → **503** JSON **`{ error: 'igdb_not_configured', message }`** — server **warns** but **does not exit**. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (wider IGDB fields + parallel **`server/cheapshark.mjs`** USD hints), **`GET /api/igdb/health`**. Search/detail field lists live in **`igdb-proxy.mjs`** (`IGDB_SEARCH_FIELDS`, `IGDB_DETAIL_FIELDS`).
+
+**Frontend integration:** Relative **`fetch('/api/...')`** — see **`src/api/library.ts`** (types **`LibraryGame`**, **`LibraryEntry`**, helpers and error parsing including proxy-misconfig hints). **`src/lib/libraryUi.ts`** maps API shapes ↔ UI cards. **`IgdbGameDetailModal`** opens from IGDB search selection: loads **`/api/igdb/game-details`**, supports add-to-library + open journal. **`CompletionSurveyModal`** (and related handlers in **`App`**) tie **completion + rating + memory** into **`PATCH /api/games`**. **`JournalPage`** consumes the same library/entry model.
+
+**Dev vs production today:** **`npm run dev`** = **concurrently** Vite + Node server. **`vite.config.ts`** proxies **`/api`** → **`http://localhost:3001`**. **`npm run build`** outputs **`dist/`**; **`npm run preview`** can serve the built UI **if** the Node API is still running on 3001 (preview inherits **`server.proxy`** in Vite 7). There is **no** **`npm start`** and **no** **`express.static('dist')`** on the API yet — true **one-process** production is still a gap (see README “Production (target)”).
+
+**Friend / packaged path (not in repo yet):** Per-user credentials in **Settings**, persistence under **userData**, **Electron + electron-builder** — still per **`docs/distribution-gameplan.md`**. **IGDB optional at startup** is already satisfied in code; **saved non-env credentials** are not.
 
 ### Friend installs (no GitHub / no Git)
 
@@ -45,10 +61,10 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 ### Suggested sequence (credentials + packaging)
 
-1. **Backend:** relax startup; gate IGDB only; consistent errors; read creds from **env OR** persisted file/API.
-2. **Backend:** `GET`/`POST` (or equivalent) **settings** for IGDB credentials — validate, **never log secrets**, clear errors.
-3. **Frontend:** **Connect IGDB** / **Settings** form + optional **Test connection** / health check.
-4. **Desktop:** Electron shell (start embedded server, `userData` paths) + **electron-builder** installers; **“for friends”** one-pager: install, where data lives, how to get Twitch keys, data stays on this PC.
+1. **Backend:** relax startup; gate IGDB only; consistent errors — **done for `.env` path**; **still to do:** read Twitch creds from **persisted settings** (userData) in addition to env.
+2. **Backend:** `GET`/`POST` **settings** for IGDB credentials — validate, **never log secrets**, clear errors — **not done**.
+3. **Frontend:** **Connect IGDB** / **Settings** form + optional **Test connection** / health check — **not done**.
+4. **Desktop:** Electron shell (start embedded server, `userData` paths) + **electron-builder** installers; **“for friends”** one-pager — **not done**.
 
 ### Role split (typical)
 
@@ -62,73 +78,61 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 ## Locked storage decision
 
-**SQLite** at `data/journal.sqlite` — private per machine, migrations-friendly, supports future **grading** without rewriting huge JSON.
+**SQLite** at `data/journal.sqlite` — implemented; migrations-friendly; **`data/`** gitignored.
 
-### Minimal data model (targets)
+### Data model (as implemented)
 
-- **Library / games:** `igdbId`, `name`, `coverUrl`, optional `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud`), `progress`, optional `hoursPlayed`, `lastPlayed`, `completedDate`, later **`userRating`** for grading.
-- **Journal entries:** stable id, `gameId` (IGDB id), modal fields (title, notes/content, date, tags, mood, screenshot URL, session meta, etc.).
-- **“Recent”:** derive (e.g. last journal activity) **or** store — pick **one rule** and document it in code.
+- **Games (API camelCase):** `igdbId`, `name`, `coverUrl`, `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud`), `progress`, `hoursPlayed`, `lastPlayed`, `completedDate`, **`userRating`** (0–10), **`listPrice`**, **`completionMemory`**, `createdAt`, `updatedAt`.
+- **Journal entries:** `id` (string), `gameId`, title, area/boss/item, `screenshotUrl`, `notes`, `mood`, `sessionLength`, `progressAtEntry`, `tags[]`, `entryDate`, timestamps.
+- **“Recent” / tabs:** driven by **stored `category`** and UI filters over **`fetchLibrary()`**; align any future “smart recent” behavior with explicit rules in **`libraryUi`** / `App` and document there.
 
-### API surface (examples)
+### API surface (implemented)
 
-Granular `GET` / `POST` / `PATCH` for `/api/games`, `/api/entries`; optional `GET /api/library` for bootstrap. Use **SQLite transactions** for multi-row updates.
+`GET /api/library`, `GET /api/games`, `POST /api/games`, `PATCH /api/games/:igdbId`, `DELETE /api/games/:igdbId`, `GET /api/entries`, `POST /api/entries`, `PATCH /api/entries/:id`, `DELETE /api/entries/:id`. Use **transactions** where multiple statements must stay atomic (already used on some writes).
 
 ### Frontend data rules
 
-- Replace mocks and hard-coded counts with **API-backed** state; **empty states** per section (e.g. “No recent games yet — add one from IGDB search”).
-- **Stats** (hours, streaks, counts): compute from persisted data or show placeholders until signals exist — **no fake numbers**.
+- **Library and entries** load from **`/api/library`**; after mutations, **refetch** or update local state so the UI stays consistent — **no** long-lived mock game lists as source of truth.
+- **Empty states** and **stats**: prefer honest placeholders or values **derived from** `games` / `entries` — avoid hard-coded dashboard numbers that contradict the DB.
 
-## IGDB search — game action menu (target UX)
+## IGDB search and game detail (implemented)
 
-**Today:** selecting a row immediately selects / navigates.
+- **`IgdbSearch`:** debounced search, portal dropdown; **`onSelect`** drives preview state (e.g. **`igdbPreview`** in `App`).
+- **`IgdbGameDetailModal`:** full-screen style modal — cover, year, summary (expandable), genres/platforms/screenshots when returned by **`/api/igdb/game-details`**, **CheapShark** USD lines when matched, **add to library** (via **`POST /api/games`** / shared helpers), **open journal** for that game. Uses merged search row + detail payload (`IgdbGame` type extended for detail fields).
+- **Optional enhancement:** surface **IGDB critic/aggregated ratings** in search or detail — would require adding fields to **`IGDB_DETAIL_FIELDS`** / **`IGDB_SEARCH_FIELDS`** and the simplified JSON shape in **`igdb-proxy.mjs`**.
 
-**Target:** click opens a **popover or small dialog** (Radix Popover/Dialog) anchored to the row, reusing **neon tokens** (`border-primary`, `journal-card`, typography). Content:
+## Grading and completion (partially implemented)
 
-| Element | Source |
-|--------|--------|
-| Icon | `coverUrl` from proxy |
-| Name | `name` |
-| Rating | IGDB `aggregated_rating` / `total_rating` (0–100); show **“—”** if null — **extend proxy `fields` and response shape** |
-| Actions | Three clear actions (wire to API once store exists) |
+- **`userRating`** and **`completionMemory`** persist through **PATCH** / **POST** game APIs; server enforces **rating 1–10** when **progress → 100** promotes a game to **completed**.
+- **Completion survey UI** (`CompletionSurveyModal` and related `App` flow) connects user input to **`patchGame`** / entry saves.
+- **Remaining polish:** clearer surfacing of rating on all cards/headers, keyboard UX, and any extra copy/tooltips — without weakening server validation.
 
-**Actions:**
+## Engineering hygiene and gaps
 
-1. **Add to wishlist** — upsert library game, category `wishlist` (or equivalent).
-2. **Start a journal entry** — open `JournalEntryModal` pre-bound to that game (or `JournalPage` with modal open).
-3. **Mark as completed** — category `completed`, optional `completedDate`.
-
-**Implementation:** prefer **`onInspectGame(g)`** plus a shared **`IgdbGameActionMenu`** so `IgdbSearch` stays thin; or equivalent callbacks (`onAddToWishlist`, etc.).
-
-## Grading (after library + journal + IGDB menu)
-
-- **user grade** on library games (e.g. 1–5 or 1–10, optional short note).
-- Show on **JournalPage** header and/or cards and in the **IGDB action menu** for games **already** in the library.
-- Persist via the **same** game PATCH API.
-- **Polish:** keyboard-friendly control, labels aligned with mood tags.
-
-## Engineering hygiene (same effort band)
-
-- Remove **`setShowSearchSuggestions`** dead code in `App.tsx`.
-- **One** mapper: consolidate `igdbToGameCard` / `mapIgdbToCard`.
-- **`vite.config.ts`:** proxy **`/api`** (not only `/api/igdb`) to the Node server for persistence in dev.
-- **Production:** document one Node process serving static **`dist/`** and `/api` + IGDB (see `README.md`).
+- **Done (don’t re-litigate unless regressions):** Vite **`/api`** → **3001**; IGDB **optional** startup; duplicate **`mapIgdbToCard`** / dead search state removed in favor of current IGDB flow.
+- **Still open:** **`npm start`** + **`express.static`** (or equivalent) so **one Node process** serves **`dist/`** + `/api`; add **`engines`** / **`.nvmrc`** when you pin Node for collaborators; tighten **CORS** if the API is exposed beyond localhost.
+- **README / production:** keep **README** “Production (target)” aligned once the unified server exists.
 
 ## Deferred / lower priority
 
-- **Recommendations / ML-style** fill when users lack data for sections like “recent games” — **after** empty states and real persistence exist.
-- **Electron + installers** — **primary path for “send to friends”** who won’t use Git; schedule after the **production Node server** + **IGDB optional startup** + **in-app credentials** story are in place (see **distribution gameplan**).
-- **Docker / CI / observability** — valuable for technical users and automation; follow **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** when a concrete ticket specifies provider and triggers.
-- **README vs agents.md** — README = short onboarding; **agents.md** + **docs/distribution-gameplan.md** = living spec; trim duplication only when you intentionally consolidate.
+- **Recommendations / ML-style** fill when users lack data for sections like “recent games.”
+- **Electron + installers** — **primary path for “send to friends”** who won’t use Git; **in-app Twitch credentials** + settings API still ahead of packaging (see **distribution gameplan**).
+- **Docker / CI / observability** — follow **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** when a concrete goal is set.
+- **README vs agents.md** — README = short onboarding; **agents.md** + **docs/distribution-gameplan.md** = living spec.
 
-## Suggested implementation order
+## Implementation status (high level)
 
-1. SQLite + API + `data/` in `.gitignore`.
-2. React data layer (load/save + post-mutation UI refresh).
-3. Strip mocks + empty states + computed counts/stats.
-4. IGDB action menu + proxy rating fields + wire three actions to API.
-5. Unify journal entries across dashboard and `JournalPage` by `gameId`.
-6. Dead code + duplicate mappers + Vite `/api` proxy.
-7. Grading UX.
-8. README / production notes (keep in sync with reality).
-9. **Friend-ready IGDB:** optional startup (no exit on missing keys), settings persistence + API, Settings / first-run UI; then **Electron + builder** + short friend-facing install doc (see **docs/distribution-gameplan.md**).
+| Area | Status |
+|------|--------|
+| SQLite + `data/` gitignore + migrations pattern | Done |
+| Library + journal REST + `fetchLibrary` client | Done |
+| IGDB search, health, game-details, CheapShark | Done |
+| IGDB optional credentials (no exit) | Done |
+| Detail modal + add to library + journal from search | Done |
+| Completion + `userRating` / `completionMemory` + survey flow | Done |
+| Single-process production server + `npm start` | **Not done** |
+| In-app IGDB credentials + settings API | **Not done** |
+| Electron / installers | **Not done** |
+| CI / Docker / observability | Optional / ticket-driven |
+
+**Suggested next focus for deployment intent:** implement **static + API** on one Express app, **`npm start`**, then refresh **README**; then **friend credentials** path; then **Electron** per **docs/distribution-gameplan.md**.
