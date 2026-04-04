@@ -16,6 +16,12 @@ export type IgdbGame = {
   platforms?: string[];
   screenshotUrls?: string[];
 
+  /** CheapShark-derived (USD), from game-details merge / proxy */
+  cheapsharkDealUsd?: number | null;
+  cheapsharkRetailUsd?: number | null;
+  cheapsharkHistoricLowUsd?: number | null;
+  cheapsharkMatchedTitle?: string | null;
+
   // raw-IGDB
   first_release_date?: number;
   cover?: { image_id: string };
@@ -100,7 +106,7 @@ export default function IgdbSearch({
       setErr(null);
       return;
     }
-    const t = setTimeout(() => doSearch(q), 420);
+    const t = setTimeout(() => doSearch(q), 480);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, endpoint, payloadMode, limit]);
@@ -114,7 +120,7 @@ export default function IgdbSearch({
     setErr(null);
 
     const igdbQuery = `search "${q}";
-fields id,name,first_release_date,summary,cover.image_id;
+fields id,name,first_release_date,cover.image_id;
 limit ${Math.min(Math.max(limit, 1), 20)};`;
 
     try {

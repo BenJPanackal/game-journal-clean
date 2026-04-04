@@ -8,6 +8,7 @@ import cors from 'cors';
 import axios from 'axios';
 import { openDatabase } from './db.mjs';
 import { createLibraryRouter } from './library-routes.mjs';
+import { fetchCheapSharkPricing } from './cheapshark.mjs';
 
 const app = express();
 
@@ -23,13 +24,24 @@ const { TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET } = process.env;
 /** Default 3001 so Vite never steals this port when 5173 is busy. Set PORT in .env to override. */
 const PORT = Number(process.env.PORT) || 3001;
 
-// Quick helper to see what envs the server actually has
 const hasClientId = Boolean(TWITCH_CLIENT_ID);
-const hasSecret   = Boolean(TWITCH_CLIENT_SECRET);
+const hasSecret = Boolean(TWITCH_CLIENT_SECRET);
+const igdbReady = hasClientId && hasSecret;
 
-if (!hasClientId || !hasSecret) {
-  console.error('❌ Missing TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET. Put them in .env.local or .env at the project root.');
-  process.exit(1);
+if (!igdbReady) {
+  console.warn(
+    '⚠️ IGDB disabled: missing TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET. Library API still works; add keys to .env for search.'
+  );
+}
+
+function requireIgdb(req, res, next) {
+  if (!igdbReady) {
+    return res.status(503).json({
+      error: 'igdb_not_configured',
+      message: 'Add TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET to .env (Twitch developer app) to use IGDB search.',
+    });
+  }
+  next();
 }
 
 // ---- Token cache
@@ -66,13 +78,12 @@ function coverUrlFromImageId(id, size = 't_cover_big') {
   return id ? `https://images.igdb.com/igdb/image/upload/${size}/${id}.jpg` : null;
 }
 
-/** List/search payload — keep small for faster IGDB responses */
+/** List/search payload — minimal fields for faster IGDB responses (summary loads in game-details). */
 function simplifySearchGame(g) {
   return {
     id: g.id,
     name: g.name,
     year: yearFromUnix(g.first_release_date),
-    summary: g.summary ?? null,
     coverUrl: coverUrlFromImageId(g.cover?.image_id),
   };
 }
@@ -91,29 +102,44 @@ function simplifyDetailGame(g) {
         .map((s) => coverUrlFromImageId(s?.image_id, 't_screenshot_med'))
         .filter(Boolean)
     : [];
+  const pricing = g._cheapshark || null;
   return {
     ...simplifySearchGame(g),
+    summary: g.summary ?? null,
     genres,
     platforms,
     screenshotUrls,
+    cheapsharkDealUsd: pricing?.currentDealUsd ?? null,
+    cheapsharkRetailUsd: pricing?.retailUsd ?? null,
+    cheapsharkHistoricLowUsd: pricing?.historicLowUsd ?? null,
+    cheapsharkMatchedTitle: pricing?.matchedTitle ?? null,
   };
 }
 
-const IGDB_SEARCH_FIELDS =
-  'id,name,first_release_date,summary,cover.image_id';
+const IGDB_SEARCH_FIELDS = 'id,name,first_release_date,cover.image_id';
 
 const IGDB_DETAIL_FIELDS =
   'id,name,first_release_date,summary,cover.image_id,genres.name,platforms.name,screenshots.image_id';
 
 // --- Health endpoint to quickly verify env + token
 app.get('/api/igdb/health', async (req, res) => {
+  if (!igdbReady) {
+    return res.json({
+      ok: false,
+      igdbConfigured: false,
+      hasClientId,
+      hasSecret,
+      message: 'IGDB credentials not configured.',
+    });
+  }
   try {
     const token = await getAccessToken();
-    res.json({ ok: true, hasClientId, hasSecret, tokenPresent: Boolean(token) });
+    res.json({ ok: true, igdbConfigured: true, hasClientId, hasSecret, tokenPresent: Boolean(token) });
   } catch (err) {
     console.error('Health check error:', err?.response?.data || err.message);
     res.status(500).json({
       ok: false,
+      igdbConfigured: true,
       hasClientId,
       hasSecret,
       error: err?.response?.data || err.message,
@@ -197,33 +223,42 @@ async function handleSearch(req, res) {
 }
 
 // Mount both paths so the UI can call either
-app.post('/api/igdb/search', handleSearch);
-app.post('/api/igdb/games/search', handleSearch);
+app.post('/api/igdb/search', requireIgdb, handleSearch);
+app.post('/api/igdb/games/search', requireIgdb, handleSearch);
 
-/** One game by IGDB id — genres, platforms, screenshots (separate from search for speed) */
-app.post('/api/igdb/game-details', async (req, res) => {
+/** One game by IGDB id — genres, platforms, screenshots + CheapShark pricing (parallel fetches). */
+app.post('/api/igdb/game-details', requireIgdb, async (req, res) => {
   const id = Number(req.body?.id);
+  const hintName = (req.body?.name ?? '').toString().trim();
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: 'id must be a positive integer' });
   }
   try {
     const token = await getAccessToken();
-    const igdbRes = await axios.post(
-      'https://api.igdb.com/v4/games',
-      `where id = ${id};
+    const [igdbRes, pricing] = await Promise.all([
+      axios.post(
+        'https://api.igdb.com/v4/games',
+        `where id = ${id};
 fields ${IGDB_DETAIL_FIELDS};
 limit 1;`,
-      {
-        headers: {
-          'Client-ID': TWITCH_CLIENT_ID,
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-          'Content-Type': 'text/plain',
-        },
-      }
-    );
+        {
+          headers: {
+            'Client-ID': TWITCH_CLIENT_ID,
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            'Content-Type': 'text/plain',
+          },
+        }
+      ),
+      fetchCheapSharkPricing(hintName),
+    ]);
     const row = igdbRes.data?.[0];
     if (!row) return res.status(404).json({ error: 'Game not found' });
+    const titleForPrice = hintName || row.name || '';
+    const priceData =
+      pricing ||
+      (titleForPrice ? await fetchCheapSharkPricing(titleForPrice) : null);
+    row._cheapshark = priceData;
     res.json({ game: simplifyDetailGame(row) });
   } catch (err) {
     const status = err?.response?.status || 500;

@@ -43,7 +43,7 @@ export default function IgdbGameDetailModal({
     fetch('/api/igdb/game-details', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ id: game.id }),
+      body: JSON.stringify({ id: game.id, name: game.name }),
     })
       .then(async (res) => {
         const payload = await res.json().catch(() => ({}));
@@ -123,16 +123,45 @@ export default function IgdbGameDetailModal({
               {year != null && (
                 <p className="text-sm text-muted-foreground mt-1">Release year: {year}</p>
               )}
-              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-accent flex-shrink-0" />
-                <span>
-                  List price:{' '}
-                  <span className="text-foreground">{formatListPriceUsd(libraryListPrice)}</span>
-                  {!inLibrary && (
-                    <span className="text-xs text-muted-foreground/80"> (set after adding to library)</span>
-                  )}
-                </span>
-              </p>
+              <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                <p className="flex items-start gap-1.5">
+                  <DollarSign className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                  <span>
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground/90 block mb-0.5">
+                      Store deals (CheapShark)
+                    </span>
+                    <span className="text-foreground">
+                      Best current: {formatListPriceUsd(merged.cheapsharkDealUsd ?? null)}
+                    </span>
+                    {merged.cheapsharkRetailUsd != null && (
+                      <span className="block text-xs mt-0.5">
+                        Typical retail: {formatListPriceUsd(merged.cheapsharkRetailUsd)}
+                      </span>
+                    )}
+                    {merged.cheapsharkHistoricLowUsd != null && (
+                      <span className="block text-xs mt-0.5">
+                        Historic low: {formatListPriceUsd(merged.cheapsharkHistoricLowUsd)}
+                      </span>
+                    )}
+                    {merged.cheapsharkDealUsd == null &&
+                      merged.cheapsharkRetailUsd == null &&
+                      merged.cheapsharkHistoricLowUsd == null && (
+                        <span className="text-xs">No deal data for this title right now.</span>
+                      )}
+                    {merged.cheapsharkMatchedTitle && merged.cheapsharkMatchedTitle !== merged.name && (
+                      <span className="block text-[11px] opacity-70 mt-1">
+                        Matched store listing: {merged.cheapsharkMatchedTitle}
+                      </span>
+                    )}
+                  </span>
+                </p>
+                {inLibrary && (
+                  <p className="pl-6 text-xs">
+                    Your saved list price:{' '}
+                    <span className="text-foreground">{formatListPriceUsd(libraryListPrice)}</span>
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <button

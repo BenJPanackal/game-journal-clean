@@ -51,6 +51,16 @@ export function igdbReleaseYear(g: IgdbGame): number | undefined {
   return undefined;
 }
 
+function cheapsharkListPriceUsd(g: IgdbGame): number | null {
+  if (typeof g.cheapsharkRetailUsd === 'number' && Number.isFinite(g.cheapsharkRetailUsd)) {
+    return g.cheapsharkRetailUsd;
+  }
+  if (typeof g.cheapsharkDealUsd === 'number' && Number.isFinite(g.cheapsharkDealUsd)) {
+    return g.cheapsharkDealUsd;
+  }
+  return null;
+}
+
 /** Build POST /api/games body when adding from IGDB (new library row). */
 export function igdbToNewLibraryGame(g: IgdbGame): {
   igdbId: number;
@@ -59,8 +69,10 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
   releaseYear: number | null;
   category: 'wishlist';
   progress: number;
+  listPrice?: number | null;
 } {
   const year = igdbReleaseYear(g);
+  const listPrice = cheapsharkListPriceUsd(g);
   return {
     igdbId: g.id,
     name: g.name,
@@ -68,6 +80,7 @@ export function igdbToNewLibraryGame(g: IgdbGame): {
     releaseYear: year != null ? year : null,
     category: 'wishlist',
     progress: 0,
+    ...(listPrice != null ? { listPrice } : {}),
   };
 }
 

@@ -5,7 +5,7 @@ import JournalEntryModal from './components/JournalEntryModal';
 import IgdbGameDetailModal from './components/IgdbGameDetailModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
-import { createEntry, fetchLibrary, patchGame, postGame } from './api/library';
+import { createEntry, fetchLibrary, postGame } from './api/library';
 import type { LibraryEntry, LibraryGame } from './api/library';
 import {
   apiEntryToDashboard,
@@ -332,7 +332,13 @@ export default function App() {
   };
 
   const persistJournalEntry = async (game: UiGame, payload: NewJournalEntryPayload) => {
-    const entry = await createEntry({
+    const progress =
+      payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
+        ? payload.progressAtEntry
+        : game.progress;
+    const shouldSyncProgress = progress !== game.progress;
+
+    const { entry, game: updatedGame } = await createEntry({
       gameId: game.id,
       title: payload.title,
       entryDate: payload.entryDate,
@@ -345,17 +351,13 @@ export default function App() {
       sessionLength: payload.sessionLength,
       progressAtEntry: payload.progressAtEntry,
       tags: payload.tags,
+      syncGameProgress: shouldSyncProgress ? progress : undefined,
     });
     setLibraryEntries((prev) => [entry, ...prev.filter((e) => e.id !== entry.id)]);
 
-    const progress =
-      payload.progressAtEntry != null && Number.isFinite(payload.progressAtEntry)
-        ? payload.progressAtEntry
-        : game.progress;
-    if (progress !== game.progress) {
-      const updated = await patchGame(game.id, { progress });
-      setLibraryGames((prev) => mergeGame(prev, updated));
-      setSelectedGame((sg) => (sg && sg.id === game.id ? apiGameToUiGame(updated) : sg));
+    if (updatedGame) {
+      setLibraryGames((prev) => mergeGame(prev, updatedGame));
+      setSelectedGame((sg) => (sg && sg.id === game.id ? apiGameToUiGame(updatedGame) : sg));
     }
   };
 
@@ -756,25 +758,33 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="journal-card z-depth-3 vhs-glow rounded-lg p-6 space-y-4">
+                <div
+                  className={`journal-card z-depth-3 vhs-glow rounded-lg p-6 space-y-4 ${
+                    latestEntry
+                      ? 'cursor-pointer hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/20 smooth-transition'
+                      : ''
+                  }`}
+                  role={latestEntry ? 'button' : undefined}
+                  tabIndex={latestEntry ? 0 : undefined}
+                  aria-label={latestEntry ? `Open journal for ${latestEntry.title}` : undefined}
+                  onClick={latestEntry ? handleReadFullEntry : undefined}
+                  onKeyDown={
+                    latestEntry
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleReadFullEntry();
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   {!latestEntry ? (
                     <p className="text-sm text-muted-foreground text-center py-6">
                       No journal entries yet. Use New after you have at least one game in your library.
                     </p>
                   ) : (
                     <>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={handleReadFullEntry}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleReadFullEntry();
-                      }
-                    }}
-                    className="rounded-lg -m-2 p-2 cursor-pointer hover:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 smooth-transition space-y-4 text-left w-full"
-                  >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-16 flex-shrink-0">
                       {latestEntry.screenshot ? (
@@ -885,7 +895,6 @@ export default function App() {
                         </>
                       )}
                     </button>
-                  </div>
                   </div>
                     </>
                   )}

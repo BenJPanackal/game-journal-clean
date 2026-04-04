@@ -331,29 +331,52 @@ export function createLibraryRouter(db) {
     const tags = Array.isArray(body.tags) ? body.tags.map(String) : [];
     const tagsJson = JSON.stringify(tags);
 
+    const rawSync = body.syncGameProgress;
+    let syncProgress = null;
+    if (rawSync !== undefined && rawSync !== null && rawSync !== '') {
+      const p = Number(rawSync);
+      if (Number.isFinite(p) && p >= 0 && p <= 100) syncProgress = p;
+    }
+
     try {
-      db.prepare(`
-        INSERT INTO journal_entries (
-          id, game_id, title, area_explored, boss_defeated, item_found,
-          screenshot_url, notes, mood, session_length, progress_at_entry, tags_json, entry_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        gameId,
-        title,
-        body.areaExplored != null ? String(body.areaExplored) : null,
-        body.bossDefeated != null ? String(body.bossDefeated) : null,
-        body.itemFound != null ? String(body.itemFound) : null,
-        body.screenshotUrl != null ? String(body.screenshotUrl) : body.screenshot != null ? String(body.screenshot) : null,
-        body.notes != null ? String(body.notes) : null,
-        (body.mood ?? 'neutral').toString(),
-        body.sessionLength != null ? String(body.sessionLength) : null,
-        body.progressAtEntry != null ? Number(body.progressAtEntry) : body.progress != null ? Number(body.progress) : null,
-        tagsJson,
-        entryDate
-      );
+      const tx = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO journal_entries (
+            id, game_id, title, area_explored, boss_defeated, item_found,
+            screenshot_url, notes, mood, session_length, progress_at_entry, tags_json, entry_date
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          gameId,
+          title,
+          body.areaExplored != null ? String(body.areaExplored) : null,
+          body.bossDefeated != null ? String(body.bossDefeated) : null,
+          body.itemFound != null ? String(body.itemFound) : null,
+          body.screenshotUrl != null ? String(body.screenshotUrl) : body.screenshot != null ? String(body.screenshot) : null,
+          body.notes != null ? String(body.notes) : null,
+          (body.mood ?? 'neutral').toString(),
+          body.sessionLength != null ? String(body.sessionLength) : null,
+          body.progressAtEntry != null ? Number(body.progressAtEntry) : body.progress != null ? Number(body.progress) : null,
+          tagsJson,
+          entryDate
+        );
+        if (syncProgress != null) {
+          const g = db.prepare('SELECT igdb_id FROM games WHERE igdb_id = ?').get(gameId);
+          if (g) {
+            db.prepare(`UPDATE games SET progress = ?, updated_at = datetime('now') WHERE igdb_id = ?`).run(
+              syncProgress,
+              gameId
+            );
+          }
+        }
+      });
+      tx();
       const row = db.prepare('SELECT * FROM journal_entries WHERE id = ?').get(id);
-      res.status(201).json({ entry: rowToEntry(row) });
+      let game = null;
+      if (syncProgress != null) {
+        game = rowToGame(db.prepare('SELECT * FROM games WHERE igdb_id = ?').get(gameId));
+      }
+      res.status(201).json({ entry: rowToEntry(row), game });
     } catch (e) {
       if (e && e.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
         return badRequest(res, 'Entry id already exists');

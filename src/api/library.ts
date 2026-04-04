@@ -42,8 +42,15 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' } as const;
 async function readError(res: Response): Promise<string> {
   const text = await res.text();
   try {
-    const j = JSON.parse(text) as { error?: unknown; details?: { status?: number; data?: unknown } };
+    const j = JSON.parse(text) as {
+      error?: unknown;
+      message?: unknown;
+      details?: { status?: number; data?: unknown };
+    };
     if (j && typeof j.error === 'string') {
+      if (j.error === 'igdb_not_configured' && typeof j.message === 'string') {
+        return j.message;
+      }
       if (j.details?.data != null) {
         const extra =
           typeof j.details.data === 'string'
@@ -57,9 +64,14 @@ async function readError(res: Response): Promise<string> {
     /* not JSON */
   }
   const trimmed = text.trim();
+  const looksLikeHtml =
+    /^<!doctype html/i.test(trimmed) || /<html[\s>]/i.test(trimmed) || trimmed.startsWith('<html');
+  if (looksLikeHtml) {
+    return 'Got an HTML page instead of JSON — often the dev proxy is pointed at the wrong port (API should be on 3001; check vite.config.ts and restart npm run dev).';
+  }
   if (trimmed && !trimmed.startsWith('<') && trimmed.length < 400) return trimmed;
   if (res.status === 502 || res.status === 503) {
-    return `API unreachable (bad proxy or API server not running on ${typeof window !== 'undefined' ? 'expected port' : '3001'}). ${res.statusText || res.status}`;
+    return `API unreachable (proxy target or API server not running — expect Node on port 3001). ${res.statusText || res.status}`;
   }
   return res.statusText || `HTTP ${res.status}`;
 }
@@ -133,15 +145,19 @@ export type PostEntryBody = {
   sessionLength?: string | null;
   progressAtEntry?: number | null;
   tags?: string[];
+  /** When set, updates library game progress in the same DB transaction (one round-trip). */
+  syncGameProgress?: number | null;
 };
 
-export async function createEntry(body: PostEntryBody): Promise<LibraryEntry> {
+export async function createEntry(
+  body: PostEntryBody
+): Promise<{ entry: LibraryEntry; game: LibraryGame | null }> {
   const res = await fetch('/api/entries', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await readError(res));
-  const data = await res.json();
-  return data.entry as LibraryEntry;
+  const data = (await res.json()) as { entry: LibraryEntry; game?: LibraryGame | null };
+  return { entry: data.entry, game: data.game ?? null };
 }
