@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowLeft, Calendar, Clock, Star, Trophy, Plus, ChevronDown, ChevronUp, X } from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
+import JournalSessionEntryModal from './JournalSessionEntryModal';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
 import { apiEntryToJournalRow, journalFieldLabels } from '../lib/libraryUi';
 import type { JournalMode, LibraryEntry } from '../api/library';
@@ -293,7 +294,24 @@ const JournalPage: React.FC<JournalPageProps> = ({
                     </div>
                   </div>
                 </div>
-                
+
+                {(isLatest || isExpanded) && (entry.rankBefore || entry.rankAfter) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    {entry.rankBefore ? (
+                      <div className="bg-muted/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-muted-foreground mb-1">Previous rank</div>
+                        <div className="text-sm text-secondary">{entry.rankBefore}</div>
+                      </div>
+                    ) : null}
+                    {entry.rankAfter ? (
+                      <div className="bg-muted/20 rounded-lg p-3 text-center">
+                        <div className="text-xs text-muted-foreground mb-1">Current rank</div>
+                        <div className="text-sm text-accent">{entry.rankAfter}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
                 {/* Structured fields (labels follow current game journal mode) */}
                 {(isLatest || isExpanded) &&
                   (entry.areaExplored || entry.bossDefeated || entry.itemFound) && (
@@ -407,16 +425,27 @@ const JournalPage: React.FC<JournalPageProps> = ({
         </div>
       )}
 
-      {/* Journal Entry Modal */}
-      <JournalEntryModal
-        isOpen={showJournalModal}
-        onClose={() => {
-          console.log('❌ Closing journal modal from journal page');
-          setShowJournalModal(false);
-        }}
-        onSave={onSaveEntry}
-        game={game}
-      />
+      {game.journalMode === 'session' ? (
+        <JournalSessionEntryModal
+          isOpen={showJournalModal}
+          onClose={() => {
+            console.log('❌ Closing session journal modal from journal page');
+            setShowJournalModal(false);
+          }}
+          onSave={onSaveEntry}
+          game={game}
+        />
+      ) : (
+        <JournalEntryModal
+          isOpen={showJournalModal}
+          onClose={() => {
+            console.log('❌ Closing journal modal from journal page');
+            setShowJournalModal(false);
+          }}
+          onSave={onSaveEntry}
+          game={game}
+        />
+      )}
     </div>
   );
 };

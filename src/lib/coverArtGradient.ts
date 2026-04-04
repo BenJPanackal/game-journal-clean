@@ -11,7 +11,13 @@ export type CoverPalette = {
   };
 };
 
+/** Bump when sampling rules change so cached bars refresh for the same cover URL. */
+const PALETTE_CACHE_VERSION = 4;
 const cache = new Map<string, CoverPalette>();
+
+function cacheKey(coverUrl: string) {
+  return `${PALETTE_CACHE_VERSION}\0${coverUrl}`;
+}
 
 function rgbCss(c: { r: number; g: number; b: number }) {
   return `rgb(${c.r},${c.g},${c.b})`;
@@ -172,7 +178,65 @@ function isPrimarilyAchromaticCover(data: Uint8ClampedArray, w: number, h: numbe
     }
   }
   if (opaque < 20) return true;
-  return chromatic / opaque < 0.06;
+  return chromatic / opaque < 0.09;
+}
+
+/**
+ * Mean HSL saturation over opaque pixels. Covers that are mostly grey with a few accent rays
+ * (e.g. Hollow Knight) still score low here — we must not let rare saturated pixels drive the bar.
+ */
+function opaqueMeanSaturation(data: Uint8ClampedArray, w: number, h: number): number {
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const a = data[i + 3];
+      if (a < 40) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      sum += rgbToHsl(r, g, b).s;
+      n++;
+    }
+  }
+  return n > 0 ? sum / n : 0;
+}
+
+/** Mean saturation ignoring pixels above a saturation cutoff (accents / skin highlights). */
+function opaqueMeanSaturationDull(
+  data: Uint8ClampedArray,
+  w: number,
+  h: number,
+  satCap = 0.42
+): number {
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const a = data[i + 3];
+      if (a < 40) continue;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const s = rgbToHsl(r, g, b).s;
+      if (s > satCap) continue;
+      sum += s;
+      n++;
+    }
+  }
+  if (n < 40) return opaqueMeanSaturation(data, w, h);
+  return sum / n;
+}
+
+/** Prefer art-averaged RGB gradient when the cover is not globally vivid. */
+function shouldUseNeutralPaletteFirst(data: Uint8ClampedArray, w: number, h: number): boolean {
+  const meanS = opaqueMeanSaturation(data, w, h);
+  const dullS = opaqueMeanSaturationDull(data, w, h);
+  return (
+    isPrimarilyAchromaticCover(data, w, h) || dullS < 0.095 || meanS < 0.15
+  );
 }
 
 type RgbAcc = { r: number; g: number; b: number; w: number };
@@ -193,7 +257,46 @@ function meanRgb(acc: RgbAcc): { r: number; g: number; b: number } | null {
   return { r: acc.r / acc.w, g: acc.g / acc.w, b: acc.b / acc.w };
 }
 
-/** Greyscale / near-monochrome covers: gradient from the actual art (no random theme colors). */
+function clamp255(x: number) {
+  return Math.max(0, Math.min(255, Math.round(x)));
+}
+
+function lightenTowardWhite(c: { r: number; g: number; b: number }, strength: number) {
+  const t = Math.max(0, Math.min(1, strength));
+  return {
+    r: clamp255(c.r + (255 - c.r) * t),
+    g: clamp255(c.g + (255 - c.g) * t),
+    b: clamp255(c.b + (255 - c.b) * t),
+  };
+}
+
+function darkenTowardBlack(c: { r: number; g: number; b: number }, strength: number) {
+  const k = Math.max(0.12, 1 - Math.min(1, strength));
+  return {
+    r: clamp255(c.r * k),
+    g: clamp255(c.g * k),
+    b: clamp255(c.b * k),
+  };
+}
+
+function trackStyleFromMeanRgb(c: { r: number; g: number; b: number }): CoverPalette['trackStyle'] {
+  const dim = {
+    r: clamp255(c.r * 0.42 + 14),
+    g: clamp255(c.g * 0.42 + 14),
+    b: clamp255(c.b * 0.42 + 14),
+  };
+  return {
+    backgroundColor: `rgba(${dim.r},${dim.g},${dim.b},0.26)`,
+    backgroundImage:
+      'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.34) 100%)',
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(255,255,255,0.05)`,
+  };
+}
+
+/**
+ * Progress bar from actual cover RGB (left / blend / right thirds) — no synthetic HSL hues.
+ * Keeps monochrome games grey, and only shows teal if the averaged pixels are actually teal-tinged.
+ */
 function buildNeutralPaletteFromCover(data: Uint8ClampedArray, w: number, h: number): CoverPalette | null {
   const global = emptyRgbAcc();
   const left = emptyRgbAcc();
@@ -217,34 +320,24 @@ function buildNeutralPaletteFromCover(data: Uint8ClampedArray, w: number, h: num
   }
   const gMean = meanRgb(global);
   const lMean = meanRgb(left);
+  const cMean = meanRgb(center);
   const rMean = meanRgb(right);
-  if (!gMean || !lMean || !rMean) return null;
+  if (!gMean || !lMean || !cMean || !rMean) return null;
 
-  const hl = rgbToHsl(lMean.r, lMean.g, lMean.b);
-  const hm = rgbToHsl(gMean.r, gMean.g, gMean.b);
-  const hr = rgbToHsl(rMean.r, rMean.g, rMean.b);
-  const sAvg = (hl.s + hm.s + hr.s) / 3;
-  let hLeft = hl.h;
-  let hMid = lerpHue(hl.h, hr.h, 0.5);
-  let hRight = hr.h;
-  let satBase = Math.min(0.42, Math.max(0.1, sAvg * 2.2 + 0.1));
-  if (sAvg < 0.055) {
-    hLeft = lerpHue(265, hMid, 0.15);
-    hMid = 265;
-    hRight = lerpHue(255, hMid, 0.12);
-    satBase = 0.14;
-  }
+  const leftStop = lightenTowardWhite(lMean, 0.26);
+  const midStop = {
+    r: clamp255(lMean.r * 0.2 + cMean.r * 0.5 + rMean.r * 0.3),
+    g: clamp255(lMean.g * 0.2 + cMean.g * 0.5 + rMean.g * 0.3),
+    b: clamp255(lMean.b * 0.2 + cMean.b * 0.5 + rMean.b * 0.3),
+  };
+  const rightStop = darkenTowardBlack(rMean, 0.38);
 
-  const leftStop = hslToRgb(hLeft, Math.min(0.55, satBase * 1.1), 0.73);
-  const midStop = hslToRgb(hMid, Math.min(0.5, satBase * 1.05), 0.48);
-  const rightStop = hslToRgb(hRight, Math.min(0.48, satBase * 0.95), 0.31);
-
-  const progressGradient = `linear-gradient(90deg, ${rgbCss(leftStop)} 0%, ${rgbCss(midStop)} 45%, ${rgbCss(rightStop)} 100%)`;
+  const progressGradient = `linear-gradient(90deg, ${rgbCss(leftStop)} 0%, ${rgbCss(midStop)} 50%, ${rgbCss(rightStop)} 100%)`;
   const titleSrc = titleColorForDarkUi(gMean.r, gMean.g, gMean.b);
   return {
     titleColor: rgbCss(titleSrc),
     progressGradient,
-    trackStyle: trackStyleFromHsl(hMid, satBase, 0.16),
+    trackStyle: trackStyleFromMeanRgb(gMean),
   };
 }
 
@@ -433,14 +526,15 @@ export function fallbackCoverPalette(primary: string, secondary: string): CoverP
 
 export function getCoverPalette(coverUrl: string): Promise<CoverPalette | null> {
   if (!coverUrl.trim()) return Promise.resolve(null);
-  const hit = cache.get(coverUrl);
+  const key = cacheKey(coverUrl);
+  const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
 
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     const done = (value: CoverPalette | null) => {
-      if (value) cache.set(coverUrl, value);
+      if (value) cache.set(key, value);
       resolve(value);
     };
 
@@ -460,7 +554,7 @@ export function getCoverPalette(coverUrl: string): Promise<CoverPalette | null> 
         ctx.drawImage(img, 0, 0, w, h);
         const { data } = ctx.getImageData(0, 0, w, h);
 
-        if (isPrimarilyAchromaticCover(data, w, h)) {
+        if (shouldUseNeutralPaletteFirst(data, w, h)) {
           const neutral = buildNeutralPaletteFromCover(data, w, h);
           done(neutral);
           return;

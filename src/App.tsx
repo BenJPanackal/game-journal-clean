@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
+import JournalSessionEntryModal from './components/JournalSessionEntryModal';
 import IgdbGameDetailModal from './components/IgdbGameDetailModal';
 import CompletionSurveyModal from './components/CompletionSurveyModal';
 import IgdbSearch from "./components/IgdbSearch";
@@ -507,6 +508,8 @@ export default function App() {
       areaExplored: payload.areaExplored,
       bossDefeated: payload.bossDefeated,
       itemFound: payload.itemFound,
+      rankBefore: payload.rankBefore,
+      rankAfter: payload.rankAfter,
       screenshotUrl: payload.screenshotUrl,
       notes: payload.notes,
       mood: payload.mood,
@@ -1191,13 +1194,22 @@ export default function App() {
         </div>
       )}
 
-      {/* Journal Entry Modal */}
-      <JournalEntryModal
-        isOpen={showJournalModal}
-        onClose={() => setShowJournalModal(false)}
-        onSave={handleSaveJournalEntryFromDashboard}
-        game={modalGame}
-      />
+      {/* Story vs multiplayer use separate journal UIs */}
+      {modalGame?.journalMode === 'session' ? (
+        <JournalSessionEntryModal
+          isOpen={showJournalModal}
+          onClose={() => setShowJournalModal(false)}
+          onSave={handleSaveJournalEntryFromDashboard}
+          game={modalGame}
+        />
+      ) : (
+        <JournalEntryModal
+          isOpen={showJournalModal}
+          onClose={() => setShowJournalModal(false)}
+          onSave={handleSaveJournalEntryFromDashboard}
+          game={modalGame}
+        />
+      )}
     </div>
   );
 }

@@ -435,8 +435,9 @@ export function createLibraryRouter(db) {
         db.prepare(`
           INSERT INTO journal_entries (
             id, game_id, title, area_explored, boss_defeated, item_found,
+            rank_before, rank_after,
             screenshot_url, notes, mood, session_length, progress_at_entry, tags_json, entry_date
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id,
           gameId,
@@ -444,6 +445,8 @@ export function createLibraryRouter(db) {
           body.areaExplored != null ? String(body.areaExplored) : null,
           body.bossDefeated != null ? String(body.bossDefeated) : null,
           body.itemFound != null ? String(body.itemFound) : null,
+          body.rankBefore != null ? String(body.rankBefore) : null,
+          body.rankAfter != null ? String(body.rankAfter) : null,
           body.screenshotUrl != null ? String(body.screenshotUrl) : body.screenshot != null ? String(body.screenshot) : null,
           body.notes != null ? String(body.notes) : null,
           (body.mood ?? 'neutral').toString(),
@@ -524,6 +527,18 @@ export function createLibraryRouter(db) {
       area_explored: body.areaExplored !== undefined ? (body.areaExplored == null ? null : String(body.areaExplored)) : row.area_explored,
       boss_defeated: body.bossDefeated !== undefined ? (body.bossDefeated == null ? null : String(body.bossDefeated)) : row.boss_defeated,
       item_found: body.itemFound !== undefined ? (body.itemFound == null ? null : String(body.itemFound)) : row.item_found,
+      rank_before:
+        body.rankBefore !== undefined
+          ? body.rankBefore == null
+            ? null
+            : String(body.rankBefore)
+          : row.rank_before,
+      rank_after:
+        body.rankAfter !== undefined
+          ? body.rankAfter == null
+            ? null
+            : String(body.rankAfter)
+          : row.rank_after,
       screenshot_url:
         body.screenshotUrl !== undefined
           ? body.screenshotUrl == null
@@ -571,6 +586,8 @@ export function createLibraryRouter(db) {
           area_explored = ?,
           boss_defeated = ?,
           item_found = ?,
+          rank_before = ?,
+          rank_after = ?,
           screenshot_url = ?,
           notes = ?,
           mood = ?,
@@ -585,6 +602,8 @@ export function createLibraryRouter(db) {
         next.area_explored,
         next.boss_defeated,
         next.item_found,
+        next.rank_before,
+        next.rank_after,
         next.screenshot_url,
         next.notes,
         next.mood,

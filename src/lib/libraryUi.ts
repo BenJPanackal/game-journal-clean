@@ -186,6 +186,8 @@ export type JournalRowEntry = {
   areaExplored: string;
   bossDefeated: string;
   itemFound: string;
+  rankBefore: string;
+  rankAfter: string;
   tags: string[];
   screenshot?: string;
   achievements: string[];
@@ -202,6 +204,8 @@ export function apiEntryToJournalRow(e: LibraryEntry): JournalRowEntry {
     areaExplored: e.areaExplored ?? '',
     bossDefeated: e.bossDefeated ?? '',
     itemFound: e.itemFound ?? '',
+    rankBefore: e.rankBefore ?? '',
+    rankAfter: e.rankAfter ?? '',
     tags: e.tags,
     screenshot: e.screenshotUrl ?? undefined,
     achievements: [],
@@ -215,6 +219,8 @@ export type NewJournalEntryPayload = {
   areaExplored: string | null;
   bossDefeated: string | null;
   itemFound: string | null;
+  rankBefore: string | null;
+  rankAfter: string | null;
   screenshotUrl: string | null;
   notes: string | null;
   mood: string;

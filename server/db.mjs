@@ -107,6 +107,12 @@ function ensureSchema(db) {
   if (!columnExists(db, 'games', 'journal_mode')) {
     db.exec(`ALTER TABLE games ADD COLUMN journal_mode TEXT NOT NULL DEFAULT 'story'`);
   }
+  if (!columnExists(db, 'journal_entries', 'rank_before')) {
+    db.exec('ALTER TABLE journal_entries ADD COLUMN rank_before TEXT');
+  }
+  if (!columnExists(db, 'journal_entries', 'rank_after')) {
+    db.exec('ALTER TABLE journal_entries ADD COLUMN rank_after TEXT');
+  }
 }
 
 export function openDatabase() {
@@ -167,6 +173,8 @@ export function rowToEntry(row) {
     mood: row.mood,
     sessionLength: row.session_length,
     progressAtEntry: row.progress_at_entry,
+    rankBefore: row.rank_before != null ? String(row.rank_before) : null,
+    rankAfter: row.rank_after != null ? String(row.rank_after) : null,
     tags,
     entryDate: row.entry_date,
     createdAt: row.created_at,

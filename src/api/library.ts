@@ -33,6 +33,9 @@ export type LibraryEntry = {
   areaExplored: string | null;
   bossDefeated: string | null;
   itemFound: string | null;
+  /** Competitive / ranked tier before this session (session journal). */
+  rankBefore: string | null;
+  rankAfter: string | null;
   screenshotUrl: string | null;
   notes: string | null;
   mood: string;
@@ -149,6 +152,8 @@ export type PostEntryBody = {
   areaExplored?: string | null;
   bossDefeated?: string | null;
   itemFound?: string | null;
+  rankBefore?: string | null;
+  rankAfter?: string | null;
   screenshotUrl?: string | null;
   notes?: string | null;
   mood?: string;
