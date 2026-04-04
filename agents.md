@@ -22,6 +22,7 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 - **Repo today:** Vite + React (**not Electron**). Browsers cannot write arbitrary files on disk — extend the **Node** server (`server/igdb-proxy.mjs` or a merged `server/index.mjs`) with **REST** that reads/writes the DB.
 - **“Real-time” in the UI:** after each successful API mutation, update React state (context / query) so lists and counts refresh immediately **without** a full reload.
 - **Distribution:** users should be able to download the project and run it locally, or eventually use an **easy non–IDE path** (often **deployment**); design APIs and build so a **single Node process** can serve **`dist/`** plus `/api` and IGDB in production.
+- **Friend installs (no Git):** see **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** — **Electron + installer** as the primary “single download” story; **each user’s own Twitch/IGDB keys** via **in-app Settings / first-run** (not `.env`); persist under **app userData**; **IGDB optional at runtime** (server must not exit if keys missing — return `igdb_not_configured`–style errors from IGDB routes until configured).
 
 ## Locked storage decision
 
@@ -80,7 +81,7 @@ Granular `GET` / `POST` / `PATCH` for `/api/games`, `/api/entries`; optional `GE
 ## Deferred / lower priority
 
 - **Recommendations / ML-style** fill when users lack data for sections like “recent games” — **after** empty states and real persistence exist.
-- **Electron** — optional packaging; reuse persistence in main process later.
+- **Electron** — optional packaging; reuse persistence in main process later; **`better-sqlite3` + Electron** need planned **native rebuild** per OS/arch (see distribution gameplan).
 - **README vs agents.md** — README = onboarding; **agents.md** = living agent spec; trim duplication only when you intentionally consolidate.
 
 ## Suggested implementation order
