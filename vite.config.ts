@@ -8,7 +8,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5174',
+        // Must match Node server (default 3001 in server/igdb-proxy.mjs — avoids clashing with Vite on 5174)
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
     },

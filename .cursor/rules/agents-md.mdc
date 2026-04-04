@@ -1,0 +1,8 @@
+---
+description: Load editable agent instructions from agents.md at repo root
+alwaysApply: true
+---
+
+# Project agent instructions
+
+Read and follow **`agents.md`** at the repository root. That file is the single place the maintainer edits for project-specific goals, constraints, and preferences for AI assistants. If `agents.md` conflicts with a one-off user message, prefer the message for that turn.

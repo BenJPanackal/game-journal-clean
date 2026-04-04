@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
-import { X, Save, Image, Trophy, MapPin, Sword, FileText, Calendar, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Save, Image, Trophy, MapPin, Sword, FileText, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import type { NewJournalEntryPayload } from '../lib/libraryUi';
+import type { UiGame } from '../lib/libraryUi';
 
 interface JournalEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (entry: any) => void;
-  game: any;
+  onSave: (payload: NewJournalEntryPayload) => void | Promise<void>;
+  game: UiGame | null;
 }
 
 const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, onSave, game }) => {
+  const gameProgress = game?.progress ?? 0;
+
   const [entryData, setEntryData] = useState({
     title: '',
     areaExplored: '',
@@ -18,12 +22,19 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
     notes: '',
     mood: 'neutral',
     sessionLength: '',
-    progress: game.progress.toString(),
+    progress: String(gameProgress),
     tags: [] as string[]
   });
 
   const [activeTag, setActiveTag] = useState('');
   const [progressError, setProgressError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !game) return;
+    setEntryData((prev) => ({ ...prev, progress: String(game.progress ?? 0) }));
+    setProgressError('');
+  }, [isOpen, game?.id, game?.progress]);
 
   // Ordered from happy to unhappy with neutral in middle - Fixed neutral color
   const moods = [
@@ -38,7 +49,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
   const handleProgressChange = (value: string) => {
     const numValue = parseFloat(value);
-    console.log('📊 Progress changed to:', numValue, 'Current game progress:', game.progress);
+    console.log('📊 Progress changed to:', numValue, 'Current game progress:', gameProgress);
     
     if (value === '') {
       setEntryData(prev => ({ ...prev, progress: '' }));
@@ -52,8 +63,8 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
       return;
     }
 
-    if (numValue < game.progress) {
-      setProgressError(`Progress cannot be lower than current progress (${game.progress}%)`);
+    if (numValue < gameProgress) {
+      setProgressError(`Progress cannot be lower than current progress (${gameProgress}%)`);
       setEntryData(prev => ({ ...prev, progress: value }));
       return;
     }
@@ -62,46 +73,49 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
     setEntryData(prev => ({ ...prev, progress: value }));
   };
 
-  const handleSave = () => {
-    console.log('💾 Saving journal entry:', entryData);
-    if (!entryData.title.trim()) {
-      console.warn('⚠️ Cannot save entry without title');
-      return;
-    }
+  const handleSave = async () => {
+    if (!game) return;
+    if (!entryData.title.trim()) return;
+    if (progressError) return;
 
-    if (progressError) {
-      console.warn('⚠️ Cannot save entry with progress validation error');
-      return;
-    }
-    
-    const newEntry = {
-      ...entryData,
-      date: new Date().toISOString(),
-      game: game.title,
-      id: Date.now(),
-      content: entryData.notes, // Map notes to content for compatibility
-      progress: entryData.progress ? parseFloat(entryData.progress) : game.progress
+    const progressNum = entryData.progress === '' ? null : parseFloat(entryData.progress);
+    const payload: NewJournalEntryPayload = {
+      title: entryData.title.trim(),
+      entryDate: new Date().toISOString(),
+      areaExplored: entryData.areaExplored.trim() || null,
+      bossDefeated: entryData.bossDefeated.trim() || null,
+      itemFound: entryData.itemFound.trim() || null,
+      screenshotUrl: entryData.screenshot.trim() || null,
+      notes: entryData.notes.trim() || null,
+      mood: entryData.mood,
+      sessionLength: entryData.sessionLength.trim() || null,
+      progressAtEntry:
+        progressNum != null && !Number.isNaN(progressNum) ? progressNum : gameProgress,
+      tags: entryData.tags,
     };
-    
-    console.log('✅ New journal entry created:', newEntry);
-    onSave(newEntry);
-    
-    setEntryData({
-      title: '',
-      areaExplored: '',
-      bossDefeated: '',
-      itemFound: '',
-      screenshot: '',
-      notes: '',
-      mood: 'neutral',
-      sessionLength: '',
-      progress: game.progress.toString(),
-      tags: []
-    });
-    
-    setProgressError('');
-    console.log('🎯 Journal entry modal closed');
-    onClose();
+
+    setSaving(true);
+    try {
+      await onSave(payload);
+      setEntryData({
+        title: '',
+        areaExplored: '',
+        bossDefeated: '',
+        itemFound: '',
+        screenshot: '',
+        notes: '',
+        mood: 'neutral',
+        sessionLength: '',
+        progress: String(game.progress ?? 0),
+        tags: [],
+      });
+      setProgressError('');
+      onClose();
+    } catch (e) {
+      console.error('Save entry failed', e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addTag = (tag: string) => {
@@ -128,7 +142,19 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
   if (!isOpen) return null;
 
-  console.log('📝 Journal entry modal opened for game:', game.title);
+  if (!game) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative m-4 journal-card rounded-lg p-6 max-w-md">
+          <p className="text-sm text-muted-foreground">Add a game from IGDB or your library first.</p>
+          <button type="button" onClick={onClose} className="mt-4 text-primary text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -209,7 +235,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                 step="0.5"
                 value={entryData.progress}
                 onChange={(e) => handleProgressChange(e.target.value)}
-                placeholder={game.progress.toString()}
+                placeholder={String(gameProgress)}
                 className={`vaporwave-number-input w-full px-4 py-3 bg-input/50 border rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition ${
                   progressError ? 'progress-error' : 'border-border/50'
                 }`}
@@ -221,7 +247,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                 </div>
               )}
               <div className="text-xs text-muted-foreground">
-                Current: {game.progress}%
+                Current: {gameProgress}%
               </div>
             </div>
             <div className="space-y-2">
@@ -370,12 +396,12 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               Cancel
             </button>
             <button
-              onClick={handleSave}
-              disabled={!entryData.title.trim() || !!progressError}
+              onClick={() => void handleSave()}
+              disabled={saving || !entryData.title.trim() || !!progressError}
               className="px-6 py-2 bg-primary/20 text-primary border border-primary/50 rounded-lg hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition interactive-hover"
             >
               <Save className="w-4 h-4 inline mr-2" />
-              Save Entry
+              {saving ? 'Saving…' : 'Save Entry'}
             </button>
           </div>
         </div>

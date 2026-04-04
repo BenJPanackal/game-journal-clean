@@ -12,6 +12,9 @@ export type IgdbGame = {
   year?: number;
   coverUrl?: string;
   summary?: string;
+  genres?: string[];
+  platforms?: string[];
+  screenshotUrls?: string[];
 
   // raw-IGDB
   first_release_date?: number;
@@ -97,7 +100,7 @@ export default function IgdbSearch({
       setErr(null);
       return;
     }
-    const t = setTimeout(() => doSearch(q), 250);
+    const t = setTimeout(() => doSearch(q), 420);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, endpoint, payloadMode, limit]);
