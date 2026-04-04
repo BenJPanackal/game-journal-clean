@@ -144,7 +144,7 @@ const MainGameCard = ({
         console.log('🎮 Main game card clicked:', game.title);
         onClick();
       }}
-      className={`journal-card hover:border-primary/50 smooth-transition interactive-hover ${zDepth} rounded-lg overflow-hidden ${cardSize} ${isLargest ? 'ring-1 ring-primary/30 vhs-glow' : ''}`}
+      className={`journal-card journal-card-dashboard hover:border-primary/50 smooth-transition interactive-hover ${zDepth} rounded-lg overflow-hidden ${cardSize} ${isLargest ? 'ring-1 ring-primary/20' : ''}`}
     >
       <div className="flex gap-6">
         <div className="relative flex-shrink-0">
@@ -627,7 +627,7 @@ export default function App() {
 
         {/* Category Cards - Fixed completed card styling to match in-progress exactly */}
         <div className="p-4 grid grid-cols-2 gap-2">
-          <div 
+          <div
             onClick={() => handleStatCardClick('inprogress')}
             className={`journal-card z-depth-1 rounded-lg p-3 text-center interactive-hover cursor-pointer ${
               activeCategory === 'inprogress' ? 'ring-2 ring-secondary/50 bg-secondary/10' : ''
@@ -637,7 +637,7 @@ export default function App() {
             <p className="text-xs text-muted-foreground">In Progress</p>
             <p className="text-secondary">{inProgressCount}</p>
           </div>
-          <div 
+          <div
             onClick={() => handleStatCardClick('completed')}
             className={`journal-card z-depth-1 rounded-lg p-3 text-center interactive-hover cursor-pointer ${
               activeCategory === 'completed' ? 'ring-2 ring-destructive/50 bg-destructive/10' : ''
@@ -668,6 +668,7 @@ export default function App() {
                 return (
                   <button
                     key={tab.id}
+                    type="button"
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex items-center justify-center gap-1 px-3 py-2 rounded-md text-xs fast-transition whitespace-nowrap ${
                       isActive
@@ -713,10 +714,8 @@ export default function App() {
             />
             {sidebarSearchQuery && (
               <button
-                onClick={() => {
-                  console.log('❌ Clearing sidebar search');
-                  setSidebarSearchQuery('');
-                }}
+                type="button"
+                onClick={() => setSidebarSearchQuery('')}
                 className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-muted rounded fast-transition"
               >
                 <X className="w-3 h-3 text-muted-foreground" />
@@ -735,11 +734,9 @@ export default function App() {
                activeTab === 'duds' ? 'Duds' : 'Completed'}
             </h3>
             <div className="flex items-center gap-1">
-              <button 
-                onClick={() => {
-                  console.log('📋 Toggle collapsed state:', !isCollapsed);
-                  setIsCollapsed(!isCollapsed);
-                }}
+              <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
                 className="p-1 hover:bg-muted rounded fast-transition"
               >
                 {isCollapsed ? (
@@ -924,9 +921,9 @@ export default function App() {
                 </div>
                 
                 <div
-                  className={`journal-card z-depth-3 vhs-glow rounded-lg p-6 space-y-4 ${
+                  className={`journal-card journal-card-dashboard z-depth-2 rounded-lg p-6 space-y-4 ${
                     latestEntry
-                      ? 'cursor-pointer hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/20 smooth-transition'
+                      ? 'cursor-pointer hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/15 smooth-transition'
                       : ''
                   }`}
                   role={latestEntry ? 'button' : undefined}

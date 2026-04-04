@@ -495,6 +495,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               Cancel
             </button>
             <button
+              type="button"
               onClick={() => void handleSave()}
               disabled={
                 saving ||
@@ -505,7 +506,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                     completionRating < 1 ||
                     completionRating > 10))
               }
-              className="px-6 py-2 bg-primary/20 text-primary border border-primary/50 rounded-lg hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition interactive-hover"
+              className="px-6 py-2.5 min-h-11 rounded-xl bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition interactive-hover font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
               <Save className="w-4 h-4 inline mr-2" />
               {saving ? 'Saving…' : 'Save Entry'}

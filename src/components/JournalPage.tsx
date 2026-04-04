@@ -61,7 +61,8 @@ const JournalPage: React.FC<JournalPageProps> = ({ game, onBack, entries, onSave
       <div className="bg-card/20 border-b border-border z-depth-2 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-4 mb-6">
-            <button 
+            <button
+              type="button"
               onClick={() => {
                 console.log('⬅️ Going back to main page');
                 onBack();
