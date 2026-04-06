@@ -145,6 +145,12 @@ export async function patchGame(
   return data.game as LibraryGame;
 }
 
+/** Permanently removes the game and all of its journal entries (server cascade). */
+export async function deleteGame(igdbId: number): Promise<void> {
+  const res = await fetch(`/api/games/${igdbId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
 export type PostEntryBody = {
   gameId: number;
   title: string;

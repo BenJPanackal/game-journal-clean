@@ -361,8 +361,12 @@ export function createLibraryRouter(db) {
       return badRequest(res, 'Invalid igdbId');
     }
     try {
-      const info = db.prepare('DELETE FROM games WHERE igdb_id = ?').run(igdbId);
-      if (info.changes === 0) return res.status(404).json({ error: 'Game not found' });
+      const row = db.prepare('SELECT igdb_id FROM games WHERE igdb_id = ?').get(igdbId);
+      if (!row) return res.status(404).json({ error: 'Game not found' });
+      db.transaction(() => {
+        db.prepare('DELETE FROM journal_entries WHERE game_id = ?').run(igdbId);
+        db.prepare('DELETE FROM games WHERE igdb_id = ?').run(igdbId);
+      })();
       res.status(204).end();
     } catch (e) {
       console.error('DELETE /api/games', e);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, Trash2, RotateCcw } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
 import JournalSessionEntryModal from './components/JournalSessionEntryModal';
@@ -7,8 +7,8 @@ import IgdbGameDetailModal from './components/IgdbGameDetailModal';
 import CompletionSurveyModal from './components/CompletionSurveyModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
-import { createEntry, fetchLibrary, patchGame, postGame } from './api/library';
-import type { JournalMode, LibraryEntry, LibraryGame } from './api/library';
+import { createEntry, deleteGame, fetchLibrary, patchGame, postGame } from './api/library';
+import type { JournalMode, LibraryCategory, LibraryEntry, LibraryGame } from './api/library';
 import {
   apiEntryToDashboard,
   apiGameToUiGame,
@@ -26,11 +26,17 @@ const SidebarGameCard = ({
   onClick,
   showFavoriteToggle,
   onToggleFavorite,
+  onRemoveFromLibrary,
+  onMarkAsDud,
+  onRestoreFromDud,
 }: {
   game: UiGame;
   onClick: () => void;
   showFavoriteToggle: boolean;
   onToggleFavorite: (game: UiGame) => void;
+  onRemoveFromLibrary: (game: UiGame) => void;
+  onMarkAsDud?: (game: UiGame) => void;
+  onRestoreFromDud?: (game: UiGame) => void;
 }) => {
   const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
   return (
@@ -75,7 +81,7 @@ const SidebarGameCard = ({
             >
               {game.title}
             </h4>
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-0.5 flex-shrink-0">
               {showFavoriteToggle ? (
                 <button
                   type="button"
@@ -100,6 +106,46 @@ const SidebarGameCard = ({
                   <Heart className="w-3 h-3 text-destructive fill-destructive" />
                 )
               )}
+              {onMarkAsDud && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMarkAsDud(game);
+                  }}
+                  className="p-0.5 rounded hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
+                  title="Mark as dud"
+                  aria-label="Mark as dud"
+                >
+                  <ThumbsDown className="w-3 h-3" />
+                </button>
+              )}
+              {onRestoreFromDud && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRestoreFromDud(game);
+                  }}
+                  className="p-0.5 rounded hover:bg-primary/15 text-muted-foreground hover:text-primary"
+                  title="Move back to completed"
+                  aria-label="Move back to completed"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFromLibrary(game);
+                }}
+                className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                title="Remove from library"
+                aria-label="Remove from library"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
             </div>
           </div>
           
@@ -130,11 +176,13 @@ const MainGameCard = ({
   onClick,
   isLargest = false,
   onToggleFavorite,
+  onRemoveFromLibrary,
 }: {
   game: UiGame;
   onClick: () => void;
   isLargest?: boolean;
   onToggleFavorite?: (game: UiGame) => void;
+  onRemoveFromLibrary: (game: UiGame) => void;
 }) => {
   const coverPalette = useCoverPalette(game.cover, game.colors.primary, game.colors.secondary);
 
@@ -218,6 +266,18 @@ const MainGameCard = ({
                   {game.isFavorite ? 'Unfavorite' : 'Favorite'}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFromLibrary(game);
+                }}
+                className="text-xs px-2 py-1 rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 fast-transition whitespace-nowrap"
+                title="Remove game and all journal entries"
+              >
+                <Trash2 className="w-3 h-3 inline mr-1 align-middle" />
+                Remove
+              </button>
             </div>
           </div>
           
@@ -424,6 +484,33 @@ export default function App() {
     setSelectedGame(null);
   };
 
+  const handleRemoveFromLibrary = useCallback(
+    async (game: UiGame) => {
+      const gameId = game.id;
+      if (
+        !window.confirm(
+          `Remove "${game.title}" from your library?\n\nThis permanently deletes the game and all journal entries for it.`
+        )
+      ) {
+        return;
+      }
+      const hadCompletionSurvey = completionDraft?.game.id === gameId;
+      setLibraryError(null);
+      try {
+        await deleteGame(gameId);
+        setLibraryGames((prev) => prev.filter((g) => g.igdbId !== gameId));
+        setLibraryEntries((prev) => prev.filter((e) => e.gameId !== gameId));
+        setSelectedGame((sg) => (sg?.id === gameId ? null : sg));
+        setCompletionDraft((d) => (d?.game.id === gameId ? null : d));
+        if (hadCompletionSurvey) setCompletionSurveyOpen(false);
+        setIgdbPreview((p) => (p?.id === gameId ? null : p));
+      } catch (e) {
+        setLibraryError(e instanceof Error ? e.message : 'Could not remove game');
+      }
+    },
+    [completionDraft?.game.id]
+  );
+
   const openIgdbPreview = (g: IgdbGame) => {
     setSearchQuery(g.name);
     setIgdbPreview(g);
@@ -568,33 +655,94 @@ export default function App() {
     setLibraryError('Completion cancelled — that journal entry was not saved.');
   };
 
-  const handleToggleFavorite = async (g: UiGame) => {
-    if (g.category === 'dud') return;
-    setLibraryError(null);
-    const next = !g.isFavorite;
-    const igdbId = g.id;
+  const handleToggleFavorite = useCallback(
+    async (g: UiGame) => {
+      if (g.category === 'dud') return;
+      setLibraryError(null);
+      const next = !g.isFavorite;
+      const igdbId = g.id;
 
-    setLibraryGames((prev) =>
-      prev.map((row) => (row.igdbId === igdbId ? { ...row, isFavorite: next } : row))
-    );
-    setSelectedGame((sg) => (sg?.id === igdbId ? { ...sg, isFavorite: next } : sg));
+      setLibraryGames((prev) =>
+        prev.map((row) => (row.igdbId === igdbId ? { ...row, isFavorite: next } : row))
+      );
+      setSelectedGame((sg) => (sg?.id === igdbId ? { ...sg, isFavorite: next } : sg));
 
-    try {
-      const updated = await patchGame(igdbId, { isFavorite: next });
-      setLibraryGames((prev) => mergeGame(prev, updated));
-      setSelectedGame((sg) => (sg?.id === igdbId ? apiGameToUiGame(updated) : sg));
-      if (next && activeCategory === 'inprogress') {
-        setActiveTab('favorite');
-      }
-    } catch (e) {
-      setLibraryError(e instanceof Error ? e.message : 'Could not update favorites');
       try {
-        await refreshLibrary();
-      } catch {
-        /* ignore secondary failure */
+        const updated = await patchGame(igdbId, { isFavorite: next });
+        setLibraryGames((prev) => mergeGame(prev, updated));
+        setSelectedGame((sg) => (sg?.id === igdbId ? apiGameToUiGame(updated) : sg));
+        if (next && (activeCategory === 'inprogress' || activeCategory === 'completed')) {
+          setActiveTab('favorite');
+        }
+      } catch (e) {
+        setLibraryError(e instanceof Error ? e.message : 'Could not update favorites');
+        try {
+          await refreshLibrary();
+        } catch {
+          /* ignore secondary failure */
+        }
       }
-    }
-  };
+    },
+    [activeCategory, refreshLibrary]
+  );
+
+  const handleMarkAsDud = useCallback(
+    async (g: UiGame) => {
+      if (g.category !== 'completed') return;
+      const igdbId = g.id;
+      setLibraryError(null);
+      setLibraryGames((prev) =>
+        prev.map((row) =>
+          row.igdbId === igdbId ? { ...row, category: 'dud' as LibraryCategory, isFavorite: false } : row
+        )
+      );
+      setSelectedGame((sg) =>
+        sg?.id === igdbId ? { ...sg, category: 'dud', isFavorite: false } : sg
+      );
+      try {
+        const updated = await patchGame(igdbId, { category: 'dud', isFavorite: false });
+        setLibraryGames((prev) => mergeGame(prev, updated));
+        setSelectedGame((sg) => (sg?.id === igdbId ? apiGameToUiGame(updated) : sg));
+        if (activeCategory === 'completed') setActiveTab('duds');
+      } catch (e) {
+        setLibraryError(e instanceof Error ? e.message : 'Could not mark as dud');
+        try {
+          await refreshLibrary();
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [activeCategory, refreshLibrary]
+  );
+
+  const handleRestoreFromDud = useCallback(
+    async (g: UiGame) => {
+      if (g.category !== 'dud') return;
+      const igdbId = g.id;
+      setLibraryError(null);
+      setLibraryGames((prev) =>
+        prev.map((row) =>
+          row.igdbId === igdbId ? { ...row, category: 'completed' as LibraryCategory } : row
+        )
+      );
+      setSelectedGame((sg) => (sg?.id === igdbId ? { ...sg, category: 'completed' } : sg));
+      try {
+        const updated = await patchGame(igdbId, { category: 'completed' });
+        setLibraryGames((prev) => mergeGame(prev, updated));
+        setSelectedGame((sg) => (sg?.id === igdbId ? apiGameToUiGame(updated) : sg));
+        if (activeCategory === 'completed') setActiveTab('completed');
+      } catch (e) {
+        setLibraryError(e instanceof Error ? e.message : 'Could not move back to completed');
+        try {
+          await refreshLibrary();
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [activeCategory, refreshLibrary]
+  );
 
   const sortedDashboardEntries = useMemo(
     () => [...libraryEntries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)),
@@ -681,6 +829,10 @@ export default function App() {
         entries={entriesForSelectedGame}
         onSaveEntry={handleSaveJournalEntryForSelectedGame}
         onJournalModeChange={handleJournalModeChange}
+        onRemoveFromLibrary={handleRemoveFromLibrary}
+        onToggleFavorite={selectedGame.category !== 'dud' ? handleToggleFavorite : undefined}
+        onMarkAsDud={selectedGame.category === 'completed' ? handleMarkAsDud : undefined}
+        onRestoreFromDud={selectedGame.category === 'dud' ? handleRestoreFromDud : undefined}
       />
     );
   }
@@ -847,8 +999,22 @@ export default function App() {
                   key={game.id}
                   game={game}
                   onClick={() => handleGameClick(game)}
-                  showFavoriteToggle={activeCategory === 'inprogress'}
+                  showFavoriteToggle={
+                    activeCategory === 'inprogress' ||
+                    (activeCategory === 'completed' && activeTab !== 'duds')
+                  }
                   onToggleFavorite={handleToggleFavorite}
+                  onRemoveFromLibrary={handleRemoveFromLibrary}
+                  onMarkAsDud={
+                    activeCategory === 'completed' && activeTab !== 'duds'
+                      ? handleMarkAsDud
+                      : undefined
+                  }
+                  onRestoreFromDud={
+                    activeCategory === 'completed' && activeTab === 'duds'
+                      ? handleRestoreFromDud
+                      : undefined
+                  }
                 />
               ))}
               {sidebarFilteredGames.length === 0 && (
@@ -991,6 +1157,7 @@ export default function App() {
                       onClick={() => handleGameClick(game)}
                       isLargest={index === 0}
                       onToggleFavorite={handleToggleFavorite}
+                      onRemoveFromLibrary={handleRemoveFromLibrary}
                     />
                   ))}
                 </div>

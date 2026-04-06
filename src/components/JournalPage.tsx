@@ -1,5 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Calendar, Clock, Star, Trophy, Plus, ChevronDown, ChevronUp, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Heart,
+  Star,
+  Trophy,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Trash2,
+  ThumbsDown,
+  RotateCcw,
+} from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
 import JournalSessionEntryModal from './JournalSessionEntryModal';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
@@ -14,6 +28,11 @@ interface JournalPageProps {
   entries: LibraryEntry[];
   onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
   onJournalModeChange?: (mode: JournalMode) => void | Promise<void>;
+  /** Permanently deletes the game and its journal entries (confirm in parent). */
+  onRemoveFromLibrary?: (game: UiGame) => void;
+  onToggleFavorite?: (game: UiGame) => void;
+  onMarkAsDud?: (game: UiGame) => void;
+  onRestoreFromDud?: (game: UiGame) => void;
 }
 
 const JournalPage: React.FC<JournalPageProps> = ({
@@ -22,6 +41,10 @@ const JournalPage: React.FC<JournalPageProps> = ({
   entries,
   onSaveEntry,
   onJournalModeChange,
+  onRemoveFromLibrary,
+  onToggleFavorite,
+  onMarkAsDud,
+  onRestoreFromDud,
 }) => {
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
@@ -81,7 +104,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
             >
               <ArrowLeft className="w-5 h-5 text-muted-foreground" />
             </button>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
               <img
                 src={game.cover}
                 alt={game.title}
@@ -164,6 +187,54 @@ const JournalPage: React.FC<JournalPageProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+            <div className="flex flex-shrink-0 flex-wrap items-center gap-2 justify-end">
+              {onToggleFavorite && (
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite(game)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 text-sm fast-transition"
+                  title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart
+                    className={`w-4 h-4 ${game.isFavorite ? 'fill-destructive' : ''}`}
+                  />
+                  {game.isFavorite ? 'Unfavorite' : 'Favorite'}
+                </button>
+              )}
+              {onMarkAsDud && (
+                <button
+                  type="button"
+                  onClick={() => onMarkAsDud(game)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/30 text-sm fast-transition"
+                  title="Move to Duds shelf"
+                >
+                  <ThumbsDown className="w-4 h-4" />
+                  Mark as dud
+                </button>
+              )}
+              {onRestoreFromDud && (
+                <button
+                  type="button"
+                  onClick={() => onRestoreFromDud(game)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 text-sm fast-transition"
+                  title="Move back to Completed"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Back to completed
+                </button>
+              )}
+              {onRemoveFromLibrary && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveFromLibrary(game)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 text-sm fast-transition"
+                  title="Remove game and all journal entries"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove
+                </button>
+              )}
             </div>
           </div>
 
