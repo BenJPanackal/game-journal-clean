@@ -33,9 +33,9 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 **Process entry:** `node server/igdb-proxy.mjs` — single Express app, default **`PORT=3001`** (override in `.env`). Dotenv: `.env.local` then `.env`.
 
-**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Game columns include **`user_rating`** (0–10 or NULL), **`completion_memory`**, **`journal_mode`**, favorites flags/rank, plus category / progress / dates / cover / name. A legacy **`list_price`** column may exist in older DBs but is **not** exposed or updated by the API. Entries store mood, notes, tags as **`tags_json`**, optional **`progress_at_entry`**, etc. Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`** for new columns.
+**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Exports **`CATEGORIES`**, **`JOURNAL_MODES`** (`story` | `session`). Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Games: **`journal_mode`**, **`is_favorite`**, **`favorite_rank`**, **`user_rating`**, **`completion_memory`**, plus category / progress / dates / cover / name. **Migration:** rows that were **`category = 'favorite'`** are moved to **`recent`** with **`is_favorite = 1`** and ranked. Legacy **`list_price`** column may exist; **`rowToGame`** **does not** include **`listPrice`** in JSON (PATCH also has no **listPrice** — column is only touched on some internal SQL paths). Entries: **`tags_json`**, **`progress_at_entry`**, **`rank_before`** / **`rank_after`** (session / ranked play). Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`**.
 
-**Library API:** `server/library-routes.mjs` mounted at **`/api`** — `GET /library` (games + entries bootstrap), `GET|POST /api/games`, **`PATCH|DELETE /api/games/:igdbId`**, `GET|POST /api/entries`, **`PATCH|DELETE /api/entries/:id`**. **PATCH game rule:** if **`progress` reaches 100** while category is still **`recent` | `favorite` | `wishlist`**, server requires **`userRating`** in **1–10** (or rejects); on success it sets **`category: completed`** and **`completed_date`** when missing.
+**Library API:** `server/library-routes.mjs` mounted at **`/api`** — `GET /library` (games + entries bootstrap), `GET|POST /api/games`, **`PATCH|DELETE /api/games/:igdbId`** (**DELETE** cascades journal rows), `GET|POST /api/entries`, **`PATCH|DELETE /api/entries/:id`**. **PATCH game:** if **`progress` reaches 100** while category is still **`recent` | `wishlist`** (not **`completed`/`dud`**), server requires **`userRating`** **1–10**; may auto-**`completed`**. **`POST /api/entries`** accepts **`syncGameProgress`** and, for **story**-mode games finishing from the journal, **`finishGame: { userRating, completionMemory? }`** when **`syncGameProgress === 100`** and the game is not already **completed**/**dud**. **`journal_mode === 'session'`** games use different progress sync rules (see `library-routes.mjs`). **PATCH** games: **`isFavorite`**, **`favoriteRank`**, **`journalMode`**, etc.
 
 **IGDB:** Same Express app. **`requireIgdb`** gates search/detail; missing Twitch env → **503** JSON **`{ error: 'igdb_not_configured', message }`** — server **warns** but **does not exit**. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (includes **`external_games`** / store links from IGDB), **`GET /api/igdb/health`**. Search/detail field lists live in **`igdb-proxy.mjs`** (`IGDB_SEARCH_FIELDS`, `IGDB_DETAIL_FIELDS`).
 
@@ -93,13 +93,13 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 ### Data model (as implemented)
 
-- **Games (API camelCase):** `igdbId`, `name`, `coverUrl`, `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud`), `progress`, `hoursPlayed`, `lastPlayed`, `completedDate`, **`userRating`** (0–10), **`completionMemory`**, **`journalMode`**, `isFavorite`, `favoriteRank`, `createdAt`, `updatedAt`.
-- **Journal entries:** `id` (string), `gameId`, title, area/boss/item, `screenshotUrl`, `notes`, `mood`, `sessionLength`, `progressAtEntry`, `tags[]`, `entryDate`, timestamps.
-- **“Recent” / tabs:** driven by **stored `category`** and UI filters over **`fetchLibrary()`**; align any future “smart recent” behavior with explicit rules in **`libraryUi`** / `App` and document there.
+- **Games (API camelCase, see `rowToGame` / `LibraryGame`):** `igdbId`, `name`, `coverUrl`, `releaseYear`, `category` (`recent` | `favorite` | `wishlist` | `completed` | `dud` — UI “heart” favorites use **`isFavorite`** + **`favoriteRank`**, not only `category`), `progress`, `hoursPlayed`, `lastPlayed`, `completedDate`, **`userRating`** (0–10), **`completionMemory`**, **`journalMode`** (`story` | `session`), **`isFavorite`**, **`favoriteRank`**, `createdAt`, `updatedAt`. **`listPrice`** is **not** in JSON responses today.
+- **Journal entries:** `id` (string), `gameId`, title, area/boss/item, **`rankBefore`** / **`rankAfter`** (session journal), `screenshotUrl`, `notes`, `mood`, `sessionLength`, `progressAtEntry`, `tags[]`, `entryDate`, timestamps — see **`rowToEntry`** / **`LibraryEntry`** in **`src/api/library.ts`**.
+- **Tabs / lists:** combine **`category`**, **`isFavorite`**, and sorts from **`libraryUi`** / **`App`** over **`fetchLibrary()`**.
 
 ### API surface (implemented)
 
-`GET /api/library`, `GET /api/games`, `POST /api/games`, `PATCH /api/games/:igdbId`, `DELETE /api/games/:igdbId`, `GET /api/entries`, `POST /api/entries`, `PATCH /api/entries/:id`, `DELETE /api/entries/:id`. Use **transactions** where multiple statements must stay atomic (already used on some writes).
+`GET /api/library`, `GET /api/games`, `POST /api/games`, `PATCH /api/games/:igdbId`, `DELETE /api/games/:igdbId`, `GET /api/entries`, `POST /api/entries` (optional **`syncGameProgress`**, **`finishGame`**), `PATCH /api/entries/:id`, `DELETE /api/entries/:id`. **Transactions** on multi-step writes (e.g. new entry + game progress/completion).
 
 ### Frontend data rules
 
@@ -109,14 +109,14 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 ## IGDB search and game detail (implemented)
 
 - **`IgdbSearch`:** debounced search, portal dropdown; **`onSelect`** drives preview state (e.g. **`igdbPreview`** in `App`).
-- **`IgdbGameDetailModal`:** full-screen style modal — cover, year, summary (expandable), genres/platforms/screenshots, **IGDB store links**, **add to library** (via **`POST /api/games`** / shared helpers), **open journal** for that game. Uses merged search row + detail payload (`IgdbGame` type extended for detail fields).
+- **`IgdbGameDetailModal`:** full-screen style modal — cover, year, summary (expandable), genres/platforms/screenshots, **IGDB `external_games` store links** (via **`/api/igdb/game-details`**), **add to library** (**`POST /api/games`**, can set **`journalMode`**), **open journal** for that game. Merged search row + detail payload (`IgdbGame` extended for detail fields).
 - **Optional enhancement:** surface **IGDB critic/aggregated ratings** in search or detail — would require adding fields to **`IGDB_DETAIL_FIELDS`** / **`IGDB_SEARCH_FIELDS`** and the simplified JSON shape in **`igdb-proxy.mjs`**.
 
 ## Grading and completion (partially implemented)
 
-- **`userRating`** and **`completionMemory`** persist through **PATCH** / **POST** game APIs; server enforces **rating 1–10** when **progress → 100** promotes a game to **completed**.
-- **Completion survey UI** (`CompletionSurveyModal` and related `App` flow) connects user input to **`patchGame`** / entry saves.
-- **Remaining polish:** clearer surfacing of rating on all cards/headers, keyboard UX, and any extra copy/tooltips — without weakening server validation.
+- **`userRating`** / **`completionMemory`:** via **`PATCH /api/games`** (progress-100 rule) and via **`POST /api/entries`** with **`syncGameProgress: 100`** + **`finishGame`** for **story**-mode games.
+- **Completion survey UI** (`CompletionSurveyModal` and **`App`** handlers) ties into **`patchGame`** / **`createEntry`** as appropriate.
+- **Remaining polish:** rating visible everywhere it matters, keyboard UX, copy/tooltips — without weakening server validation.
 
 ## Engineering hygiene and gaps
 
@@ -141,6 +141,7 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 | IGDB optional credentials (no exit) | Done |
 | Detail modal + add to library + journal from search | Done |
 | Completion + `userRating` / `completionMemory` + survey flow | Done |
+| **`journalMode` story/session**, favorites flags + rank, entry **rank** fields | Done |
 | Single-process production server + `npm start` | **Not done** |
 | In-app IGDB credentials + settings API | **Not done** |
 | Electron / installers | **Not done** |
