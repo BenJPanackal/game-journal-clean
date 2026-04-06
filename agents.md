@@ -51,6 +51,17 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 **Full detail:** **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** (DevOps on standby: CI, Docker, observability — implement when given a concrete goal).
 
+### How to deploy (friend-facing, summary)
+
+- **Artifact:** **Electron + electron-builder** (or equivalent) → **`.exe` (Windows)** / **`.dmg` (macOS)** — friends **install once**, no Git or GitHub.
+- **Runtime:** **One local Node process** serves the **built static UI** from **`dist/`** and mounts **`/api`** (library, SQLite, IGDB proxy). Friends do **not** open `index.html` in a browser from disk; the desktop shell **starts that server** and opens a window to it.
+- **Electron window URL:** Load the app from **`http://127.0.0.1:<port>`** (same process as **`/api`**), **not** `file://`. That keeps **`fetch('/api/…')`**, SPA routing, and dev/prod behavior aligned with **`vite.config` proxy** during development.
+- **Prerequisite in repo:** implement **`npm start`** (or one documented command) = **`vite build`** + **Express** (or merged server) **`static('dist')`** + existing **`/api`** routes — see **Engineering hygiene** and **README** “Production (target).” Packaging wires Electron to that entry (or spawns a **child Node** process with normal ABI for **`better-sqlite3`** if you split main vs server).
+- **Twitch / IGDB:** Each friend uses **their own** Twitch Developer **Client ID + Secret** (IGDB client-credentials). **In-app Settings / first-run** persists credentials under **OS app user data**; **developers** keep **`.env`** at repo root. Do **not** ship one shared secret for many users.
+- **Server behavior:** Start **without** Twitch env if needed; **IGDB routes** return **`401`/`503`** + JSON (e.g. **`igdb_not_configured`**) until credentials exist from **env** or **saved settings**; **library / journal** still work when IGDB is unset (product choice). **Never** `process.exit(1)` on missing keys in the shipped path.
+- **Native modules:** Plan **rebuilds** of **`better-sqlite3`** per **OS/arch** and, if the API runs **inside Electron’s main process**, per **Electron Node ABI**; choose **Windows-only** vs **Windows + macOS** early (signing / notarization).
+- **Parallel work:** **Frontend** can keep shipping **Vite + React** against **`/api`** (relative URLs + agreed errors). **Desktop/packaging** can follow once **single-process production** exists; align on **settings API** and error shapes at integration time.
+
 **Locked product choices**
 
 - **Each user has their own Twitch Developer app** (Client ID + Secret for IGDB client-credentials). Do **not** rely on one shared key for many users (quota / ToS / abuse).
