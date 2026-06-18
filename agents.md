@@ -33,17 +33,19 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 **Process entry:** `node server/igdb-proxy.mjs` — single Express app, default **`PORT=3001`** (override in `.env`). Dotenv: `.env.local` then `.env`.
 
-**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Exports **`CATEGORIES`**, **`JOURNAL_MODES`** (`story` | `session`). Tables **`games`** (PK `igdb_id`), **`journal_entries`** (PK `id` TEXT), **`schema_migrations`**. Games: **`journal_mode`**, **`is_favorite`**, **`favorite_rank`**, **`user_rating`**, **`completion_memory`**, plus category / progress / dates / cover / name. **Migration:** rows that were **`category = 'favorite'`** are moved to **`recent`** with **`is_favorite = 1`** and ranked. Legacy **`list_price`** column may exist; **`rowToGame`** **does not** include **`listPrice`** in JSON (PATCH also has no **listPrice** — column is only touched on some internal SQL paths). Entries: **`tags_json`**, **`progress_at_entry`**, **`rank_before`** / **`rank_after`** (session / ranked play). Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`**.
+**Database:** `server/db.mjs` → **`data/journal.sqlite`** (WAL, `foreign_keys`), **`data/`** is **gitignored**. Exports **`CATEGORIES`**, **`JOURNAL_MODES`** (`story` | `session`). Tables **`games`**, **`journal_entries`**, **`app_profile`** (singleton row: profile + optional Twitch creds + **`onboarding_complete`**), **`schema_migrations`**. Games: **`journal_mode`**, **`is_favorite`**, **`favorite_rank`**, **`user_rating`**, **`completion_memory`**, plus category / progress / dates / cover / name. **Migration:** rows that were **`category = 'favorite'`** are moved to **`recent`** with **`is_favorite = 1`** and ranked. Legacy **`list_price`** column may exist; **`rowToGame`** **does not** include **`listPrice`** in JSON. Entries: **`tags_json`**, **`progress_at_entry`**, **`rank_before`** / **`rank_after`**. Schema evolves via **`MIGRATION_VERSION`** plus conditional **`ALTER TABLE`**.
 
 **Library API:** `server/library-routes.mjs` mounted at **`/api`** — `GET /library` (games + entries bootstrap), `GET|POST /api/games`, **`PATCH|DELETE /api/games/:igdbId`** (**DELETE** cascades journal rows), `GET|POST /api/entries`, **`PATCH|DELETE /api/entries/:id`**. **PATCH game:** if **`progress` reaches 100** while category is still **`recent` | `wishlist`** (not **`completed`/`dud`**), server requires **`userRating`** **1–10**; may auto-**`completed`**. **`POST /api/entries`** accepts **`syncGameProgress`** and, for **story**-mode games finishing from the journal, **`finishGame: { userRating, completionMemory? }`** when **`syncGameProgress === 100`** and the game is not already **completed**/**dud**. **`journal_mode === 'session'`** games use different progress sync rules (see `library-routes.mjs`). **PATCH** games: **`isFavorite`**, **`favoriteRank`**, **`journalMode`**, etc.
 
-**IGDB:** Same Express app. **`requireIgdb`** gates search/detail; missing Twitch env → **503** JSON **`{ error: 'igdb_not_configured', message }`** — server **warns** but **does not exit**. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (includes **`external_games`** / store links from IGDB), **`GET /api/igdb/health`**. Search/detail field lists live in **`igdb-proxy.mjs`** (`IGDB_SEARCH_FIELDS`, `IGDB_DETAIL_FIELDS`).
+**IGDB:** Same Express app. **`requireIgdb`** gates search/detail; missing credentials → **503** **`igdb_not_configured`**. **`resolveTwitchCredentials(db)`** in **`server/twitch-credentials.mjs`**: **SQLite `app_profile`** overrides **`.env`** when both ID and secret are stored. Token cache invalidates on credential change. Routes: **`POST /api/igdb/search`**, **`POST /api/igdb/game-details`** (**`external_games`** store links), **`GET /api/igdb/health`**. Field lists in **`igdb-proxy.mjs`**.
 
-**Frontend integration:** Relative **`fetch('/api/...')`** — see **`src/api/library.ts`** (types **`LibraryGame`**, **`LibraryEntry`**, helpers and error parsing including proxy-misconfig hints). **`src/lib/libraryUi.ts`** maps API shapes ↔ UI cards. **`IgdbGameDetailModal`** opens from IGDB search selection: loads **`/api/igdb/game-details`**, supports add-to-library + open journal. **`CompletionSurveyModal`** (and related handlers in **`App`**) tie **completion + rating + memory** into **`PATCH /api/games`**. **`JournalPage`** consumes the same library/entry model.
+**Profile / IGDB setup API:** **`server/settings-routes.mjs`** — **`GET|PATCH /api/profile`**. **`ProfileSetupModal`** + **`src/api/profile.ts`**; blocking first-run when **`onboardingComplete`** is false; re-open from header in **`App`**. Optional polish: explicit **Test connection** button (health endpoint exists).
 
-**Dev vs production today:** **`npm run dev`** = **concurrently** Vite + Node server. **`vite.config.ts`** proxies **`/api`** → **`http://localhost:3001`**. **`npm run build`** outputs **`dist/`**; **`npm run preview`** can serve the built UI **if** the Node API is still running on 3001 (preview inherits **`server.proxy`** in Vite 7). There is **no** **`npm start`** and **no** **`express.static('dist')`** on the API yet — true **one-process** production is still a gap (see README “Production (target)”).
+**Frontend integration:** Relative **`fetch('/api/...')`** — **`src/api/library.ts`**, **`src/lib/libraryUi.ts`**, **`IgdbGameDetailModal`**, **`CompletionSurveyModal`**, **`JournalPage`**.
 
-**Friend / packaged path (not in repo yet):** Per-user credentials in **Settings**, persistence under **userData**, **Electron + electron-builder** — still per **`docs/distribution-gameplan.md`**. **IGDB optional at startup** is already satisfied in code; **saved non-env credentials** are not.
+**Dev vs production today:** **`npm run dev`** = Vite + Node on **3001**; **`vite.config.ts`** proxies **`/api`**. **`npm run build`** → **`dist/`**; **`npm run preview`** + API on 3001 for prod-like runs. **No `npm start`** / **no `express.static('dist')`** yet.
+
+**Friend / packaged path (not in repo yet):** **Electron + electron-builder** per **`docs/distribution-gameplan.md`**. **In-app Twitch setup (browser/dev)** via **`/api/profile`** is **done**; **userData** relocation + installers **not done**.
 
 ### Friend installs (no GitHub / no Git)
 
@@ -72,10 +74,10 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 
 ### Suggested sequence (credentials + packaging)
 
-1. **Backend:** relax startup; gate IGDB only; consistent errors — **done for `.env` path**; **still to do:** read Twitch creds from **persisted settings** (userData) in addition to env.
-2. **Backend:** `GET`/`POST` **settings** for IGDB credentials — validate, **never log secrets**, clear errors — **not done**.
-3. **Frontend:** **Connect IGDB** / **Settings** form + optional **Test connection** / health check — **not done**.
-4. **Desktop:** Electron shell (start embedded server, `userData` paths) + **electron-builder** installers; **“for friends”** one-pager — **not done**.
+1. **Backend:** optional startup + IGDB gating + **`resolveTwitchCredentials`** (DB + env) — **done**.
+2. **Backend:** **`GET|PATCH /api/profile`** for Twitch creds + validation — **done** (secrets in SQLite **`app_profile`**; move to **userData** when packaging).
+3. **Frontend:** **`ProfileSetupModal`** + first-run / re-open setup — **done**; optional **Test connection** UX — **not done**.
+4. **Desktop:** Electron + **`npm start`** (static + API) + **electron-builder** + friend install doc — **not done**.
 
 ### Role split (typical)
 
@@ -127,24 +129,40 @@ Do not commit unrelated working-tree changes unless the user asked to include th
 ## Deferred / lower priority
 
 - **Recommendations / ML-style** fill when users lack data for sections like “recent games.”
-- **Electron + installers** — **primary path for “send to friends”** who won’t use Git; **in-app Twitch credentials** + settings API still ahead of packaging (see **distribution gameplan**).
+- **Electron + installers** — **primary path for “send to friends”**; **`/api/profile`** covers dev/browser setup — **Electron + userData** still required for true friend installs (see **distribution gameplan**).
 - **Docker / CI / observability** — follow **[docs/distribution-gameplan.md](docs/distribution-gameplan.md)** when a concrete goal is set.
 - **README vs agents.md** — README = short onboarding; **agents.md** + **docs/distribution-gameplan.md** = living spec.
+
+## Active todos (re-prioritized)
+
+| Priority | Task | Status |
+|----------|------|--------|
+| **P0 — deployment** | **`npm start`**: `express.static('dist')` + existing `/api` on one process; document in README / START.md | **Next** |
+| **P0 — deployment** | Pin **`engines.node`** / **`.nvmrc`**; add **`.env.example`** | Open |
+| **P1 — packaging** | Electron shell + **userData** for DB/creds + **electron-builder** (friend `.exe`) | Open |
+| **P1 — packaging** | Friend one-pager (install, Twitch keys, where data lives) | Open |
+| **P2 — polish** | Grading/rating visible on more surfaces (cards, IGDB modal for library games); keyboard UX | Partial |
+| **P2 — polish** | Profile setup: **Test connection** button → `/api/igdb/health` | Open |
+| **P3 — optional** | IGDB **aggregated_rating** in search/detail | Open |
+| **P3 — optional** | Recommendations / sparse-section fill | Deferred |
+| **P3 — optional** | CI, Docker, observability | Deferred |
 
 ## Implementation status (high level)
 
 | Area | Status |
 |------|--------|
-| SQLite + `data/` gitignore + migrations pattern | Done |
+| SQLite + `data/` gitignore + migrations + **`app_profile`** | Done |
 | Library + journal REST + `fetchLibrary` client | Done |
-| IGDB search, health, game-details | Done |
-| IGDB optional credentials (no exit) | Done |
+| IGDB search, health, game-details, external store links | Done |
+| IGDB optional startup; creds from **env or DB** | Done |
+| **`GET|PATCH /api/profile`** + **`ProfileSetupModal`** | Done |
 | Detail modal + add to library + journal from search | Done |
 | Completion + `userRating` / `completionMemory` + survey flow | Done |
 | **`journalMode` story/session**, favorites flags + rank, entry **rank** fields | Done |
-| Single-process production server + `npm start` | **Not done** |
-| In-app IGDB credentials + settings API | **Not done** |
-| Electron / installers | **Not done** |
+| Mocks removed; API-backed UI + empty states | Done |
+| Single-process production server + **`npm start`** | **Not done** |
+| Electron / installers + userData credential path | **Not done** |
+| Grading UX polish (everywhere it matters) | **Partial** |
 | CI / Docker / observability | Optional / ticket-driven |
 
-**Suggested next focus for deployment intent:** implement **static + API** on one Express app, **`npm start`**, then refresh **README**; then **friend credentials** path; then **Electron** per **docs/distribution-gameplan.md**.
+**Suggested next focus:** **`npm start`** (static + API) → README/START sync → **Electron** per **docs/distribution-gameplan.md**.
