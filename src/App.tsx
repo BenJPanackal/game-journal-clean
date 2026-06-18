@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, Trash2, RotateCcw, Settings } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
 import JournalSessionEntryModal from './components/JournalSessionEntryModal';
 import IgdbGameDetailModal from './components/IgdbGameDetailModal';
 import CompletionSurveyModal from './components/CompletionSurveyModal';
+import ProfileSetupModal from './components/ProfileSetupModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
+import { fetchProfile, type AppProfile } from './api/profile';
 import { createEntry, deleteGame, fetchLibrary, patchGame, postGame } from './api/library';
 import type { JournalMode, LibraryCategory, LibraryEntry, LibraryGame } from './api/library';
 import {
@@ -370,6 +372,22 @@ export default function App() {
     game: UiGame;
     payload: NewJournalEntryPayload;
   } | null>(null);
+  const [appProfile, setAppProfile] = useState<AppProfile | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const p = await fetchProfile();
+      setAppProfile(p);
+      if (!p.onboardingComplete) setProfileModalOpen(true);
+    } catch {
+      setAppProfile(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProfile();
+  }, [refreshProfile]);
 
   const gameTitleById = useMemo(() => {
     const m = new Map<number, string>();
@@ -411,7 +429,7 @@ export default function App() {
   const dashboardRecentGames = useMemo(
     () =>
       sortByUpdatedDesc(libraryGames.filter((g) => isPlayingShelf(g)))
-        .slice(0, 10)
+        .slice(0, 5)
         .map(apiGameToUiGame),
     [libraryGames]
   );
@@ -857,6 +875,39 @@ export default function App() {
             GAME JOURNAL
           </h1>
           <p className="text-sm text-muted-foreground">Track your gaming adventures</p>
+          <div className="mt-3 flex items-center gap-2">
+            {appProfile?.profileImageUrl ? (
+              <img
+                src={appProfile.profileImageUrl}
+                alt=""
+                className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-muted/80 border border-border flex items-center justify-center text-xs text-muted-foreground flex-shrink-0">
+                {(appProfile?.displayName || '?').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">
+                {appProfile?.displayName?.trim() || 'Player'}
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                IGDB: {appProfile?.hasTwitchCredentials ? 'ready' : 'not set'}
+                {appProfile?.credentialSource && appProfile.credentialSource !== 'none'
+                  ? ` · ${appProfile.credentialSource}`
+                  : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(true)}
+              className="p-2 rounded-lg hover:bg-muted/60 fast-transition flex-shrink-0"
+              title="Profile & Twitch / IGDB keys"
+              aria-label="Profile and IGDB setup"
+            >
+              <Settings className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </div>
         </div>
 
         {/* Category Cards - Fixed completed card styling to match in-progress exactly */}
@@ -1142,25 +1193,26 @@ export default function App() {
               {/* Recent Games - More prominent now */}
               <div className="lg:col-span-3">
                 <h3 className="text-2xl text-primary readable-accent mb-6">Recent Games</h3>
-                <div className="space-y-6">
-                  {dashboardRecentGames.length === 0 && !libraryLoading && (
-                    <p className="text-sm text-muted-foreground">
-                      No active games in your <strong className="text-primary">recent list</strong> yet. Add a title
-                      from IGDB, star favorites anytime, and browse everything under{' '}
-                      <strong className="text-accent">Library</strong> in the sidebar.
-                    </p>
-                  )}
-                  {dashboardRecentGames.map((game, index) => (
-                    <MainGameCard 
-                      key={game.id} 
-                      game={game} 
-                      onClick={() => handleGameClick(game)}
-                      isLargest={index === 0}
-                      onToggleFavorite={handleToggleFavorite}
-                      onRemoveFromLibrary={handleRemoveFromLibrary}
-                    />
-                  ))}
-                </div>
+                {dashboardRecentGames.length === 0 && !libraryLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    No active games in your <strong className="text-primary">recent list</strong> yet. Add a title
+                    from IGDB, star favorites anytime, and browse everything under{' '}
+                    <strong className="text-accent">Library</strong> in the sidebar.
+                  </p>
+                ) : (
+                  <div className="recent-games-scroll neon-scrollbars space-y-6">
+                    {dashboardRecentGames.map((game, index) => (
+                      <MainGameCard
+                        key={game.id}
+                        game={game}
+                        onClick={() => handleGameClick(game)}
+                        isLargest={index === 0 && dashboardRecentGames.length === 1}
+                        onToggleFavorite={handleToggleFavorite}
+                        onRemoveFromLibrary={handleRemoveFromLibrary}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Latest Journal Entry */}
@@ -1331,6 +1383,18 @@ export default function App() {
         gameTitle={completionDraft?.game.title ?? ''}
         onCancel={handleCompletionSurveyCancel}
         onConfirm={handleCompletionSurveyConfirm}
+      />
+
+      <ProfileSetupModal
+        open={profileModalOpen}
+        initialProfile={appProfile}
+        blocking={Boolean(appProfile && !appProfile.onboardingComplete)}
+        allowSkip={!appProfile?.hasTwitchCredentials}
+        onClose={() => setProfileModalOpen(false)}
+        onSaved={(p) => {
+          setAppProfile(p);
+          setProfileModalOpen(false);
+        }}
       />
 
       <IgdbGameDetailModal

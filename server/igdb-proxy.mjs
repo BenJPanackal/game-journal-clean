@@ -8,6 +8,8 @@ import cors from 'cors';
 import axios from 'axios';
 import { openDatabase } from './db.mjs';
 import { createLibraryRouter } from './library-routes.mjs';
+import { createSettingsRouter } from './settings-routes.mjs';
+import { credentialSource, hasIgdbCredentials, resolveTwitchCredentials } from './twitch-credentials.mjs';
 
 const app = express();
 
@@ -19,36 +21,53 @@ app.use(express.text({ type: 'text/plain' })); // also accept text/plain
 const db = openDatabase();
 app.use('/api', createLibraryRouter(db));
 
-const { TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET } = process.env;
 /** Default 3001 so Vite never steals this port when 5173 is busy. Set PORT in .env to override. */
 const PORT = Number(process.env.PORT) || 3001;
 
-const hasClientId = Boolean(TWITCH_CLIENT_ID);
-const hasSecret = Boolean(TWITCH_CLIENT_SECRET);
-const igdbReady = hasClientId && hasSecret;
+// ---- Token cache (invalidated when stored credentials change)
+let accessToken = null;
+let tokenExpiresAt = 0;
+/** Fingerprint creds so we refresh token if Client ID changes. */
+let cachedCredsKey = '';
 
-if (!igdbReady) {
+function invalidateIgdbTokenCache() {
+  accessToken = null;
+  tokenExpiresAt = 0;
+  cachedCredsKey = '';
+}
+
+app.use(
+  '/api',
+  createSettingsRouter(db, { onCredentialsChanged: invalidateIgdbTokenCache })
+);
+
+if (!hasIgdbCredentials(db)) {
   console.warn(
-    '⚠️ IGDB disabled: missing TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET. Library API still works; add keys to .env for search.'
+    '⚠️ IGDB disabled: add Twitch Developer credentials in Setup / .env (TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET). Library API still works.'
   );
 }
 
 function requireIgdb(req, res, next) {
-  if (!igdbReady) {
+  if (!hasIgdbCredentials(db)) {
     return res.status(503).json({
       error: 'igdb_not_configured',
-      message: 'Add TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET to .env (Twitch developer app) to use IGDB search.',
+      message:
+        'Add your Twitch Developer Client ID and Secret in Setup (or TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET in .env) to use IGDB search.',
     });
   }
   next();
 }
 
-// ---- Token cache
-let accessToken = null;
-let tokenExpiresAt = 0;
-
 async function getAccessToken() {
+  const creds = resolveTwitchCredentials(db);
+  if (!creds) throw new Error('Missing Twitch credentials');
+
+  const key = `${creds.clientId}:${creds.clientSecret}`;
   const now = Date.now();
+  if (cachedCredsKey !== key) {
+    accessToken = null;
+    cachedCredsKey = key;
+  }
   if (accessToken && now < tokenExpiresAt - 60_000) return accessToken;
 
   const tokenRes = await axios.post(
@@ -56,8 +75,8 @@ async function getAccessToken() {
     null,
     {
       params: {
-        client_id: TWITCH_CLIENT_ID,
-        client_secret: TWITCH_CLIENT_SECRET,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
         grant_type: 'client_credentials',
       },
     }
@@ -132,27 +151,31 @@ const IGDB_DETAIL_FIELDS =
   'external_games.uid,external_games.url,external_games.name,' +
   'external_games.external_game_source.name,external_games.external_game_source.id';
 
-// --- Health endpoint to quickly verify env + token
+// --- Health endpoint to quickly verify credentials + token
 app.get('/api/igdb/health', async (req, res) => {
-  if (!igdbReady) {
+  const src = credentialSource(db);
+  if (!hasIgdbCredentials(db)) {
     return res.json({
       ok: false,
       igdbConfigured: false,
-      hasClientId,
-      hasSecret,
+      credentialSource: src,
       message: 'IGDB credentials not configured.',
     });
   }
   try {
     const token = await getAccessToken();
-    res.json({ ok: true, igdbConfigured: true, hasClientId, hasSecret, tokenPresent: Boolean(token) });
+    res.json({
+      ok: true,
+      igdbConfigured: true,
+      credentialSource: src,
+      tokenPresent: Boolean(token),
+    });
   } catch (err) {
     console.error('Health check error:', err?.response?.data || err.message);
     res.status(500).json({
       ok: false,
       igdbConfigured: true,
-      hasClientId,
-      hasSecret,
+      credentialSource: src,
       error: err?.response?.data || err.message,
     });
   }
@@ -172,6 +195,7 @@ async function handleSearch(req, res) {
       const body = (req.body ?? '').toString();
       const looksLikeIgdbQuery = /fields\s|\blimit\b|search\s*"/i.test(body);
 
+      const creds = resolveTwitchCredentials(db);
       const token = await getAccessToken();
       const igdbQuery = looksLikeIgdbQuery
         ? body
@@ -182,7 +206,7 @@ async function handleSearch(req, res) {
         igdbQuery,
         {
           headers: {
-            'Client-ID': TWITCH_CLIENT_ID,
+            'Client-ID': creds.clientId,
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
             'Content-Type': 'text/plain',
@@ -201,6 +225,7 @@ async function handleSearch(req, res) {
       return res.status(400).json({ error: 'Missing "query"' });
     }
 
+    const creds = resolveTwitchCredentials(db);
     const token = await getAccessToken();
 
     const igdbRes = await axios.post(
@@ -210,7 +235,7 @@ async function handleSearch(req, res) {
        limit ${limit};`,
       {
         headers: {
-          'Client-ID': TWITCH_CLIENT_ID,
+          'Client-ID': creds.clientId,
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
           'Content-Type': 'text/plain',
@@ -244,6 +269,7 @@ app.post('/api/igdb/game-details', requireIgdb, async (req, res) => {
     return res.status(400).json({ error: 'id must be a positive integer' });
   }
   try {
+    const creds = resolveTwitchCredentials(db);
     const token = await getAccessToken();
     const igdbRes = await axios.post(
       'https://api.igdb.com/v4/games',
@@ -252,7 +278,7 @@ fields ${IGDB_DETAIL_FIELDS};
 limit 1;`,
       {
         headers: {
-          'Client-ID': TWITCH_CLIENT_ID,
+          'Client-ID': creds.clientId,
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
           'Content-Type': 'text/plain',
@@ -274,6 +300,6 @@ limit 1;`,
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ IGDB proxy running on http://localhost:${PORT}`);
-  console.log(`   Env check → hasClientId: ${hasClientId}, hasSecret: ${hasSecret}`);
+  console.log(`✅ API + IGDB proxy running on http://localhost:${PORT}`);
+  console.log(`   Twitch / IGDB credentials → ${credentialSource(db)} (configured: ${hasIgdbCredentials(db)})`);
 });

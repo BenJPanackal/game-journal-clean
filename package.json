@@ -7,7 +7,11 @@
     "dev": "concurrently \"vite\" \"node server/igdb-proxy.mjs\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "npm rebuild better-sqlite3"
+  },
+  "engines": {
+    "node": ">=22 <23"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.11",

@@ -113,6 +113,29 @@ function ensureSchema(db) {
   if (!columnExists(db, 'journal_entries', 'rank_after')) {
     db.exec('ALTER TABLE journal_entries ADD COLUMN rank_after TEXT');
   }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_profile (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
+      display_name TEXT,
+      profile_image_url TEXT,
+      twitch_client_id TEXT,
+      twitch_client_secret TEXT,
+      onboarding_complete INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  const prof = db.prepare('SELECT singleton FROM app_profile WHERE singleton = 1').get();
+  if (!prof) {
+    db.prepare('INSERT INTO app_profile (singleton, onboarding_complete) VALUES (1, 0)').run();
+  }
+  const envTwitchOk =
+    (process.env.TWITCH_CLIENT_ID ?? '').trim() && (process.env.TWITCH_CLIENT_SECRET ?? '').trim();
+  if (envTwitchOk) {
+    const r = db.prepare('SELECT twitch_client_id FROM app_profile WHERE singleton = 1').get();
+    if (r && !(String(r.twitch_client_id ?? '').trim())) {
+      db.prepare('UPDATE app_profile SET onboarding_complete = 1 WHERE singleton = 1').run();
+    }
+  }
 }
 
 export function openDatabase() {

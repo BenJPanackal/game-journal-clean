@@ -663,3 +663,39 @@
 .neon-scrollbars::-webkit-scrollbar-thumb:hover {
   background: color-mix(in oklch, var(--primary) 52%, transparent);
 }
+
+/* Dashboard recent games — fixed viewport (~5 cards), theme scroll */
+.recent-games-scroll {
+  max-height: min(58rem, calc(100vh - 14rem));
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  margin-right: -0.25rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--primary) 50%, transparent)
+    color-mix(in oklch, var(--primary) 8%, transparent);
+}
+.recent-games-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+.recent-games-scroll::-webkit-scrollbar-track {
+  background: color-mix(in oklch, var(--primary) 6%, transparent);
+  border-radius: 8px;
+}
+.recent-games-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--primary) 55%, transparent),
+    color-mix(in oklch, var(--accent) 40%, transparent)
+  );
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklch, var(--primary) 35%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--primary) 25%, transparent);
+}
+.recent-games-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--primary) 70%, transparent),
+    color-mix(in oklch, var(--accent) 55%, transparent)
+  );
+}

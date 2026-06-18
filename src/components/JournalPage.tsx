@@ -8,14 +8,15 @@ import {
   Trophy,
   Plus,
   ChevronDown,
-  ChevronUp,
   X,
   Trash2,
   ThumbsDown,
   RotateCcw,
 } from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
+import JournalEntryViewModal from './JournalEntryViewModal';
 import JournalSessionEntryModal from './JournalSessionEntryModal';
+import type { JournalRowEntry } from '../lib/libraryUi';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
 import { apiEntryToJournalRow, journalFieldLabels } from '../lib/libraryUi';
 import type { JournalMode, LibraryEntry } from '../api/library';
@@ -47,7 +48,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
   onRestoreFromDud,
 }) => {
   const [showJournalModal, setShowJournalModal] = useState(false);
-  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [viewingEntry, setViewingEntry] = useState<JournalRowEntry | null>(null);
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
 
   const journalRows = useMemo(
@@ -60,19 +61,12 @@ const JournalPage: React.FC<JournalPageProps> = ({
   const fieldLabels = journalFieldLabels(game.journalMode);
   const sessionGame = game.journalMode === 'session';
 
-  const toggleEntryExpansion = (entryId: string) => {
-    setExpandedEntries(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(entryId)) {
-        newSet.delete(entryId);
-      } else {
-        newSet.add(entryId);
-      }
-      return newSet;
-    });
+  const openEntryView = (entry: JournalRowEntry) => {
+    setViewingEntry(entry);
   };
 
-  const handleScreenshotClick = (screenshot: string) => {
+  const handleScreenshotClick = (screenshot: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     console.log('🖼️ Opening screenshot modal:', screenshot);
     setScreenshotModal(screenshot);
   };
@@ -299,11 +293,26 @@ const JournalPage: React.FC<JournalPageProps> = ({
           )}
 
           {journalRows.map((entry, index) => {
-            const isExpanded = expandedEntries.has(entry.id);
             const isLatest = index === 0;
+            const hasLongContent = entry.content.trim().length > 200;
             
             return (
-              <div key={entry.id} className={`journal-card z-depth-1 rounded-lg p-6 ${isLatest ? 'ring-2 ring-primary/40 z-depth-3 vhs-glow' : ''}`}>
+              <div
+                key={entry.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openEntryView(entry)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openEntryView(entry);
+                  }
+                }}
+                className={`journal-card z-depth-1 rounded-lg p-6 cursor-pointer hover:border-primary/40 interactive-hover text-left w-full ${
+                  isLatest ? 'ring-2 ring-primary/40 z-depth-3 vhs-glow' : ''
+                }`}
+                aria-label={`Read journal entry: ${entry.title}`}
+              >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <h3 className="text-xl mb-2 readable-accent" style={{ color: game.colors.primary }}>
@@ -342,7 +351,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
                         src={entry.screenshot}
                         alt="Session screenshot"
                         className="w-full h-full object-cover rounded border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 smooth-transition"
-                        onClick={() => handleScreenshotClick(entry.screenshot!)}
+                        onClick={(e) => handleScreenshotClick(entry.screenshot!, e)}
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           e.currentTarget.nextElementSibling?.classList.remove('hidden');
@@ -366,7 +375,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
                   </div>
                 </div>
 
-                {(isLatest || isExpanded) && (entry.rankBefore || entry.rankAfter) && (
+                {(entry.rankBefore || entry.rankAfter) && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     {entry.rankBefore ? (
                       <div className="bg-muted/20 rounded-lg p-3 text-center">
@@ -384,8 +393,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
                 )}
 
                 {/* Structured fields (labels follow current game journal mode) */}
-                {(isLatest || isExpanded) &&
-                  (entry.areaExplored || entry.bossDefeated || entry.itemFound) && (
+                {(entry.areaExplored || entry.bossDefeated || entry.itemFound) && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     {entry.areaExplored && (
                       <div className="bg-muted/20 rounded-lg p-3 text-center">
@@ -409,7 +417,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
                 )}
 
                 {/* Enhanced tags display for latest entry */}
-                {isLatest && entry.tags && (
+                {entry.tags.length > 0 && (
                   <div className="mb-4">
                     <div className="flex flex-wrap gap-2">
                       {entry.tags.map((tag, tagIndex) => (
@@ -428,11 +436,9 @@ const JournalPage: React.FC<JournalPageProps> = ({
                   </div>
                 )}
                 
-                {/* Content with Inline Expansion */}
-                <div className={`journal-text mb-4 smooth-transition ${
-                  isExpanded ? 'expanded-content' : 'collapsed-content'
-                }`}>
-                  <p>{entry.content}</p>
+                {/* Preview — click card to read full entry */}
+                <div className="journal-text mb-4 collapsed-content">
+                  <p>{entry.content || 'No notes — click to open entry.'}</p>
                 </div>
 
                 {entry.achievements && entry.achievements.length > 0 && (
@@ -451,30 +457,25 @@ const JournalPage: React.FC<JournalPageProps> = ({
                   </div>
                 )}
 
-                {/* Inline Expand/Collapse Button */}
                 <div className="mt-4 pt-3 border-t border-border/50">
-                  <button 
-                    onClick={() => toggleEntryExpansion(entry.id)}
-                    className="text-sm text-primary hover:text-primary/80 fast-transition flex items-center gap-1"
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp className="w-4 h-4" />
-                        Collapse Entry
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="w-4 h-4" />
-                        Expand Entry
-                      </>
-                    )}
-                  </button>
+                  <span className="text-sm text-primary flex items-center gap-1">
+                    {hasLongContent ? 'Read full entry' : 'View entry'}
+                    <ChevronDown className="w-4 h-4" aria-hidden />
+                  </span>
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      <JournalEntryViewModal
+        open={viewingEntry != null}
+        entry={viewingEntry}
+        game={game}
+        onClose={() => setViewingEntry(null)}
+        onScreenshotClick={(url) => setScreenshotModal(url)}
+      />
 
       {/* Screenshot Modal */}
       {screenshotModal && (
