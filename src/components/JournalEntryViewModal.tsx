@@ -1,15 +1,18 @@
 import { useEffect } from 'react';
-import { X, Calendar, Clock, Trophy } from 'lucide-react';
+import { X, Calendar, Clock, Trophy, Pencil } from 'lucide-react';
+import type { EntryScreenshot } from '../api/library';
 import type { JournalRowEntry } from '../lib/libraryUi';
 import { journalFieldLabels } from '../lib/libraryUi';
 import type { UiGame } from '../lib/libraryUi';
+import { ScreenshotThumbStrip } from './ScreenshotLightbox';
 
 type Props = {
   open: boolean;
   entry: JournalRowEntry | null;
   game: UiGame;
   onClose: () => void;
-  onScreenshotClick?: (url: string) => void;
+  onEdit?: (entry: JournalRowEntry) => void;
+  onOpenScreenshots?: (images: EntryScreenshot[], index: number) => void;
 };
 
 function moodClass(mood: string) {
@@ -34,7 +37,8 @@ export default function JournalEntryViewModal({
   entry,
   game,
   onClose,
-  onScreenshotClick,
+  onEdit,
+  onOpenScreenshots,
 }: Props) {
   useEffect(() => {
     if (!open) return;
@@ -93,31 +97,38 @@ export default function JournalEntryViewModal({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted/60 fast-transition flex-shrink-0"
-            aria-label="Close entry"
-          >
-            <X className="w-6 h-6 text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={() => onEdit(entry)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/40 text-primary hover:bg-primary/10 text-sm fast-transition"
+              >
+                <Pencil className="w-4 h-4" />
+                Edit
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-muted/60 fast-transition"
+              aria-label="Close entry"
+            >
+              <X className="w-6 h-6 text-muted-foreground" />
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <article className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          {entry.screenshot ? (
-            <button
-              type="button"
-              onClick={() => onScreenshotClick?.(entry.screenshot!)}
-              className="block w-full max-w-md mx-auto rounded-lg overflow-hidden border border-primary/25 hover:ring-2 hover:ring-primary/40 fast-transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-            >
-              <img
-                src={entry.screenshot}
-                alt="Session screenshot — click to enlarge"
-                className="w-full h-auto object-cover"
-              />
-            </button>
+          {entry.screenshots.length > 0 ? (
+            <ScreenshotThumbStrip
+              images={entry.screenshots}
+              size="md"
+              className="justify-center"
+              onOpen={(i) => onOpenScreenshots?.(entry.screenshots, i)}
+            />
           ) : null}
 
           {(entry.rankBefore || entry.rankAfter) && (

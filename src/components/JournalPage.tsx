@@ -8,19 +8,20 @@ import {
   Trophy,
   Plus,
   ChevronDown,
-  X,
   Trash2,
   ThumbsDown,
   RotateCcw,
+  Pencil,
 } from 'lucide-react';
 import JournalEntryModal from './JournalEntryModal';
 import JournalEntryViewModal from './JournalEntryViewModal';
 import JournalSessionEntryModal from './JournalSessionEntryModal';
 import GameGuidePanel from './GameGuidePanel';
+import ScreenshotLightbox, { ScreenshotThumbStrip } from './ScreenshotLightbox';
 import type { JournalRowEntry } from '../lib/libraryUi';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
 import { apiEntryToJournalRow, journalFieldLabels } from '../lib/libraryUi';
-import type { JournalMode, LibraryEntry } from '../api/library';
+import type { EntryScreenshot, JournalMode, LibraryEntry } from '../api/library';
 import type { UiGame } from '../lib/libraryUi';
 import { useCoverPalette } from '../hooks/useCoverPalette';
 
@@ -29,6 +30,10 @@ interface JournalPageProps {
   onBack: () => void;
   entries: LibraryEntry[];
   onSaveEntry: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
+  onUpdateEntry?: (
+    entryId: string,
+    payload: NewJournalEntryPayload
+  ) => void | Promise<void>;
   onJournalModeChange?: (mode: JournalMode) => void | Promise<void>;
   /** Permanently deletes the game and its journal entries (confirm in parent). */
   onRemoveFromLibrary?: (game: UiGame) => void;
@@ -42,6 +47,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
   onBack,
   entries,
   onSaveEntry,
+  onUpdateEntry,
   onJournalModeChange,
   onRemoveFromLibrary,
   onToggleFavorite,
@@ -49,8 +55,11 @@ const JournalPage: React.FC<JournalPageProps> = ({
   onRestoreFromDud,
 }) => {
   const [showJournalModal, setShowJournalModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalRowEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<JournalRowEntry | null>(null);
-  const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: EntryScreenshot[]; index: number } | null>(
+    null
+  );
 
   const journalRows = useMemo(
     () => [...entries].sort((a, b) => b.entryDate.localeCompare(a.entryDate)).map(apiEntryToJournalRow),
@@ -66,10 +75,29 @@ const JournalPage: React.FC<JournalPageProps> = ({
     setViewingEntry(entry);
   };
 
-  const handleScreenshotClick = (screenshot: string, e?: React.MouseEvent) => {
+  const openEntryEdit = (entry: JournalRowEntry) => {
+    setViewingEntry(null);
+    setEditingEntry(entry);
+    setShowJournalModal(true);
+  };
+
+  const closeEntryModal = () => {
+    setShowJournalModal(false);
+    setEditingEntry(null);
+  };
+
+  const handleModalSave = async (payload: NewJournalEntryPayload) => {
+    if (editingEntry && onUpdateEntry) {
+      await onUpdateEntry(editingEntry.id, payload);
+      return;
+    }
+    return onSaveEntry(payload);
+  };
+
+  const openScreenshots = (images: EntryScreenshot[], index = 0, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    console.log('🖼️ Opening screenshot modal:', screenshot);
-    setScreenshotModal(screenshot);
+    if (!images.length) return;
+    setLightbox({ images, index });
   };
 
   const getMoodColor = (mood: string) => {
@@ -278,7 +306,7 @@ const JournalPage: React.FC<JournalPageProps> = ({
             <h2 className="text-2xl text-primary readable-accent">Journal Entries</h2>
             <button 
               onClick={() => {
-                console.log('➕ Opening new entry modal from journal page');
+                setEditingEntry(null);
                 setShowJournalModal(true);
               }}
               className="px-4 py-2 bg-primary/20 border border-primary/50 rounded-lg text-primary hover:bg-primary/30 fast-transition interactive-hover"
@@ -342,27 +370,37 @@ const JournalPage: React.FC<JournalPageProps> = ({
                         Latest
                       </div>
                     )}
+                    {onUpdateEntry ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEntryEdit(entry);
+                        }}
+                        className="p-1.5 rounded-lg border border-border/60 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/10 fast-transition"
+                        title="Edit entry"
+                        aria-label={`Edit journal entry: ${entry.title}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    ) : null}
                   </div>
                 </div>
                 
                 {/* Entry Header with Screenshot or Placeholder */}
                 <div className="flex items-start gap-3 mb-4">
-                  <div className="w-12 h-16 flex-shrink-0">
-                    {entry.screenshot ? (
-                      <img
-                        src={entry.screenshot}
-                        alt="Session screenshot"
-                        className="w-full h-full object-cover rounded border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 smooth-transition"
-                        onClick={(e) => handleScreenshotClick(entry.screenshot!, e)}
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                        }}
+                  <div className="flex-shrink-0">
+                    {entry.screenshots.length > 0 ? (
+                      <ScreenshotThumbStrip
+                        images={entry.screenshots}
+                        onOpen={(i) => openScreenshots(entry.screenshots, i)}
+                        size="sm"
                       />
-                    ) : null}
-                    <div className={`w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 rounded border border-primary/20 flex items-center justify-center ${entry.screenshot ? 'hidden' : ''}`}>
-                      <Plus className="w-5 h-5 text-primary" />
-                    </div>
+                    ) : (
+                      <div className="w-12 h-16 bg-gradient-to-br from-primary/20 to-secondary/20 rounded border border-primary/20 flex items-center justify-center">
+                        <Plus className="w-5 h-5 text-primary" />
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex-1">
@@ -476,48 +514,33 @@ const JournalPage: React.FC<JournalPageProps> = ({
         entry={viewingEntry}
         game={game}
         onClose={() => setViewingEntry(null)}
-        onScreenshotClick={(url) => setScreenshotModal(url)}
+        onEdit={onUpdateEntry ? openEntryEdit : undefined}
+        onOpenScreenshots={(images, index) => setLightbox({ images, index })}
       />
 
-      {/* Screenshot Modal */}
-      {screenshotModal && (
-        <div 
-          className="screenshot-modal"
-          onClick={() => setScreenshotModal(null)}
-        >
-          <button
-            onClick={() => setScreenshotModal(null)}
-            className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 fast-transition z-10"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <img
-            src={screenshotModal}
-            alt="Screenshot"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {lightbox && (
+        <ScreenshotLightbox
+          images={lightbox.images}
+          startIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
       )}
 
       {game.journalMode === 'session' ? (
         <JournalSessionEntryModal
           isOpen={showJournalModal}
-          onClose={() => {
-            console.log('❌ Closing session journal modal from journal page');
-            setShowJournalModal(false);
-          }}
-          onSave={onSaveEntry}
+          onClose={closeEntryModal}
+          onSave={handleModalSave}
           game={game}
+          initialEntry={editingEntry}
         />
       ) : (
         <JournalEntryModal
           isOpen={showJournalModal}
-          onClose={() => {
-            console.log('❌ Closing journal modal from journal page');
-            setShowJournalModal(false);
-          }}
-          onSave={onSaveEntry}
+          onClose={closeEntryModal}
+          onSave={handleModalSave}
           game={game}
+          initialEntry={editingEntry}
         />
       )}
     </div>

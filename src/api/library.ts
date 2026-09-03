@@ -26,6 +26,13 @@ export type LibraryGame = {
   journalMode?: JournalMode;
 };
 
+export type EntryScreenshot = {
+  id: string;
+  url: string;
+  mimeType: string;
+  originalName?: string | null;
+};
+
 export type LibraryEntry = {
   id: string;
   gameId: number;
@@ -37,6 +44,8 @@ export type LibraryEntry = {
   rankBefore: string | null;
   rankAfter: string | null;
   screenshotUrl: string | null;
+  /** Local uploaded screenshots (preferred). Empty when only a legacy URL exists. */
+  screenshots?: EntryScreenshot[];
   notes: string | null;
   mood: string;
   sessionLength: string | null;
@@ -161,6 +170,8 @@ export type PostEntryBody = {
   rankBefore?: string | null;
   rankAfter?: string | null;
   screenshotUrl?: string | null;
+  /** Ordered local media ids from POST /api/media */
+  screenshotIds?: string[];
   notes?: string | null;
   mood?: string;
   sessionLength?: string | null;
@@ -186,4 +197,33 @@ export async function createEntry(
   if (!res.ok) throw new Error(await readError(res));
   const data = (await res.json()) as { entry: LibraryEntry; game?: LibraryGame | null };
   return { entry: data.entry, game: data.game ?? null };
+}
+
+export type PatchEntryBody = {
+  title?: string;
+  entryDate?: string;
+  areaExplored?: string | null;
+  bossDefeated?: string | null;
+  itemFound?: string | null;
+  rankBefore?: string | null;
+  rankAfter?: string | null;
+  screenshotUrl?: string | null;
+  /** Ordered local media ids from POST /api/media */
+  screenshotIds?: string[];
+  notes?: string | null;
+  mood?: string;
+  sessionLength?: string | null;
+  progressAtEntry?: number | null;
+  tags?: string[];
+};
+
+export async function patchEntry(id: string, body: PatchEntryBody): Promise<LibraryEntry> {
+  const res = await fetch(`/api/entries/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = (await res.json()) as { entry: LibraryEntry };
+  return data.entry;
 }

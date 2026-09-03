@@ -1,7 +1,7 @@
 import type { IgdbGame } from '../components/IgdbSearch';
-import type { JournalMode, LibraryEntry, LibraryGame } from '../api/library';
+import type { EntryScreenshot, JournalMode, LibraryEntry, LibraryGame } from '../api/library';
 
-export type { JournalMode };
+export type { JournalMode, EntryScreenshot };
 
 /** Card/list shape used across App (matches former mock fields). */
 export type UiGame = {
@@ -150,6 +150,7 @@ export type DashboardEntry = {
   mood: string;
   tags: string[];
   screenshot?: string;
+  screenshots: EntryScreenshot[];
 };
 
 function formatEntryDate(iso: string): string {
@@ -157,7 +158,20 @@ function formatEntryDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
+/** Prefer uploaded screenshots; fall back to legacy single URL. */
+export function entryScreenshotList(e: {
+  screenshots?: EntryScreenshot[] | null;
+  screenshotUrl?: string | null;
+}): EntryScreenshot[] {
+  if (Array.isArray(e.screenshots) && e.screenshots.length > 0) return e.screenshots;
+  if (e.screenshotUrl) {
+    return [{ id: 'legacy', url: e.screenshotUrl, mimeType: 'image/*', originalName: null }];
+  }
+  return [];
+}
+
 export function apiEntryToDashboard(e: LibraryEntry, gameTitle: string): DashboardEntry {
+  const shots = entryScreenshotList(e);
   return {
     id: e.id,
     gameId: e.gameId,
@@ -171,7 +185,8 @@ export function apiEntryToDashboard(e: LibraryEntry, gameTitle: string): Dashboa
     itemFound: e.itemFound ?? '',
     mood: e.mood,
     tags: e.tags,
-    screenshot: e.screenshotUrl ?? undefined,
+    screenshot: shots[0]?.url,
+    screenshots: shots,
   };
 }
 
@@ -190,10 +205,13 @@ export type JournalRowEntry = {
   rankAfter: string;
   tags: string[];
   screenshot?: string;
+  screenshots: EntryScreenshot[];
   achievements: string[];
+  progressAtEntry: number | null;
 };
 
 export function apiEntryToJournalRow(e: LibraryEntry): JournalRowEntry {
+  const shots = entryScreenshotList(e);
   return {
     id: e.id,
     date: e.entryDate,
@@ -207,8 +225,10 @@ export function apiEntryToJournalRow(e: LibraryEntry): JournalRowEntry {
     rankBefore: e.rankBefore ?? '',
     rankAfter: e.rankAfter ?? '',
     tags: e.tags,
-    screenshot: e.screenshotUrl ?? undefined,
+    screenshot: shots[0]?.url,
+    screenshots: shots,
     achievements: [],
+    progressAtEntry: e.progressAtEntry,
   };
 }
 
@@ -222,6 +242,7 @@ export type NewJournalEntryPayload = {
   rankBefore: string | null;
   rankAfter: string | null;
   screenshotUrl: string | null;
+  screenshotIds?: string[];
   notes: string | null;
   mood: string;
   sessionLength: string | null;

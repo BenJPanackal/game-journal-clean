@@ -27,7 +27,9 @@ import {
 } from './components/icons';
 import type { NeonIconProps } from './components/icons';
 import { fetchProfile, type AppProfile } from './api/profile';
-import { createEntry, deleteGame, fetchLibrary, patchGame, postGame } from './api/library';
+import ScreenshotLightbox, { ScreenshotThumbStrip } from './components/ScreenshotLightbox';
+import type { EntryScreenshot } from './api/library';
+import { createEntry, deleteGame, fetchLibrary, patchEntry, patchGame, postGame } from './api/library';
 import type { JournalMode, LibraryCategory, LibraryEntry, LibraryGame } from './api/library';
 import {
   apiEntryToDashboard,
@@ -381,7 +383,9 @@ export default function App() {
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [entryExpanded, setEntryExpanded] = useState(false);
-  const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: EntryScreenshot[]; index: number } | null>(
+    null
+  );
   const [igdbPreview, setIgdbPreview] = useState<IgdbGame | null>(null);
   const [completionSurveyOpen, setCompletionSurveyOpen] = useState(false);
   const [completionDraft, setCompletionDraft] = useState<{
@@ -637,6 +641,7 @@ export default function App() {
       rankBefore: payload.rankBefore,
       rankAfter: payload.rankAfter,
       screenshotUrl: payload.screenshotUrl,
+      screenshotIds: payload.screenshotIds,
       notes: payload.notes,
       mood: payload.mood,
       sessionLength: payload.sessionLength,
@@ -670,6 +675,32 @@ export default function App() {
   const handleSaveJournalEntryForSelectedGame = async (payload: NewJournalEntryPayload) => {
     if (!selectedGame) return;
     return persistJournalEntry(selectedGame, payload);
+  };
+
+  const handleUpdateJournalEntry = async (entryId: string, payload: NewJournalEntryPayload) => {
+    setLibraryError(null);
+    try {
+      const entry = await patchEntry(entryId, {
+        title: payload.title,
+        entryDate: payload.entryDate,
+        areaExplored: payload.areaExplored,
+        bossDefeated: payload.bossDefeated,
+        itemFound: payload.itemFound,
+        rankBefore: payload.rankBefore,
+        rankAfter: payload.rankAfter,
+        screenshotUrl: payload.screenshotUrl,
+        screenshotIds: payload.screenshotIds,
+        notes: payload.notes,
+        mood: payload.mood,
+        sessionLength: payload.sessionLength,
+        progressAtEntry: payload.progressAtEntry,
+        tags: payload.tags,
+      });
+      setLibraryEntries((prev) => prev.map((e) => (e.id === entry.id ? entry : e)));
+    } catch (e) {
+      setLibraryError(e instanceof Error ? e.message : 'Could not update entry');
+      throw e;
+    }
   };
 
   const handleCompletionSurveyConfirm = async (data: {
@@ -812,8 +843,9 @@ export default function App() {
     }
   };
 
-  const handleScreenshotClick = (screenshot: string) => {
-    setScreenshotModal(screenshot);
+  const openScreenshots = (images: EntryScreenshot[], index = 0) => {
+    if (!images.length) return;
+    setLightbox({ images, index });
   };
 
   const getMoodColor = (mood: string) => {
@@ -867,6 +899,7 @@ export default function App() {
         onBack={handleBackToMain}
         entries={entriesForSelectedGame}
         onSaveEntry={handleSaveJournalEntryForSelectedGame}
+        onUpdateEntry={handleUpdateJournalEntry}
         onJournalModeChange={handleJournalModeChange}
         onRemoveFromLibrary={handleRemoveFromLibrary}
         onToggleFavorite={selectedGame.category !== 'dud' ? handleToggleFavorite : undefined}
@@ -1285,25 +1318,18 @@ export default function App() {
                   ) : (
                     <>
                   <div className="flex items-start gap-3">
-                    <div className="w-12 h-16 flex-shrink-0">
-                      {latestEntry.screenshot ? (
-                        <img
-                          src={latestEntry.screenshot}
-                          alt="Session screenshot"
-                          className="w-full h-full object-cover rounded border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 smooth-transition"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleScreenshotClick(latestEntry.screenshot!);
-                          }}
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                          }}
+                    <div className="flex-shrink-0">
+                      {latestEntry.screenshots.length > 0 ? (
+                        <ScreenshotThumbStrip
+                          images={latestEntry.screenshots}
+                          onOpen={(i) => openScreenshots(latestEntry.screenshots, i)}
+                          size="sm"
                         />
-                      ) : null}
-                      <div className={`w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20 rounded border border-primary/20 flex items-center justify-center ${latestEntry.screenshot ? 'hidden' : ''}`}>
-                        <Edit3 className="w-5 h-5 text-primary" />
-                      </div>
+                      ) : (
+                        <div className="w-12 h-16 bg-gradient-to-br from-primary/20 to-secondary/20 rounded border border-primary/20 flex items-center justify-center">
+                          <Edit3 className="w-5 h-5 text-primary" />
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex-1">
@@ -1431,24 +1457,12 @@ export default function App() {
         onOpenJournal={openJournalFromIgdbPreview}
       />
 
-      {/* Screenshot Modal */}
-      {screenshotModal && (
-        <div 
-          className="screenshot-modal"
-          onClick={() => setScreenshotModal(null)}
-        >
-          <button
-            onClick={() => setScreenshotModal(null)}
-            className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 fast-transition z-10"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <img
-            src={screenshotModal}
-            alt="Screenshot"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {lightbox && (
+        <ScreenshotLightbox
+          images={lightbox.images}
+          startIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
       )}
 
       {/* Story vs multiplayer use separate journal UIs */}

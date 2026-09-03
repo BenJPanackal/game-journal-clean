@@ -1,14 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, Image, FileText, Clock, Gamepad2, TrendingDown, TrendingUp } from 'lucide-react';
-import type { NewJournalEntryPayload } from '../lib/libraryUi';
+import { X, Save, FileText, Clock, Gamepad2, TrendingDown, TrendingUp } from 'lucide-react';
+import type { JournalRowEntry, NewJournalEntryPayload } from '../lib/libraryUi';
 import type { UiGame } from '../lib/libraryUi';
+import type { EntryScreenshot } from '../api/library';
+import ScreenshotUploader from './ScreenshotUploader';
 
 interface JournalSessionEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
   game: UiGame | null;
+  /** When set, modal prefills and saves as an update. */
+  initialEntry?: JournalRowEntry | null;
 }
+
+const emptySessionForm = () => ({
+  title: '',
+  rankBefore: '',
+  rankAfter: '',
+  notes: '',
+  mood: 'neutral',
+  sessionLength: '',
+  tags: [] as string[],
+  screenshots: [] as EntryScreenshot[],
+});
 
 const SESSION_TAGS = [
   'Carry',
@@ -46,24 +61,34 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
   onClose,
   onSave,
   game,
+  initialEntry = null,
 }) => {
-  const [entryData, setEntryData] = useState({
-    title: '',
-    rankBefore: '',
-    rankAfter: '',
-    screenshot: '',
-    notes: '',
-    mood: 'neutral',
-    sessionLength: '',
-    tags: [] as string[],
-  });
+  const isEditing = initialEntry != null;
+  const [entryData, setEntryData] = useState(emptySessionForm);
+  const [entryDate, setEntryDate] = useState(() => new Date().toISOString());
   const [activeTag, setActiveTag] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !game) return;
-    setEntryData((prev) => ({ ...prev }));
-  }, [isOpen, game?.id]);
+    if (initialEntry) {
+      setEntryData({
+        title: initialEntry.title,
+        rankBefore: initialEntry.rankBefore,
+        rankAfter: initialEntry.rankAfter,
+        notes: initialEntry.content,
+        mood: initialEntry.mood || 'neutral',
+        sessionLength: initialEntry.sessionLength,
+        tags: [...initialEntry.tags],
+        screenshots: (initialEntry.screenshots || []).filter((s) => s.id !== 'legacy'),
+      });
+      setEntryDate(initialEntry.date);
+    } else {
+      setEntryData(emptySessionForm());
+      setEntryDate(new Date().toISOString());
+    }
+    setActiveTag('');
+  }, [isOpen, game?.id, initialEntry]);
 
   const handleSave = async () => {
     if (!game) return;
@@ -71,13 +96,14 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
 
     const payload: NewJournalEntryPayload = {
       title: entryData.title.trim(),
-      entryDate: new Date().toISOString(),
+      entryDate: isEditing ? entryDate : new Date().toISOString(),
       areaExplored: null,
       bossDefeated: null,
       itemFound: null,
       rankBefore: entryData.rankBefore.trim() || null,
       rankAfter: entryData.rankAfter.trim() || null,
-      screenshotUrl: entryData.screenshot.trim() || null,
+      screenshotUrl: entryData.screenshots[0]?.url ?? null,
+      screenshotIds: entryData.screenshots.map((s) => s.id),
       notes: entryData.notes.trim() || null,
       mood: entryData.mood,
       sessionLength: entryData.sessionLength.trim() || null,
@@ -92,16 +118,7 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
         onClose();
         return;
       }
-      setEntryData({
-        title: '',
-        rankBefore: '',
-        rankAfter: '',
-        screenshot: '',
-        notes: '',
-        mood: 'neutral',
-        sessionLength: '',
-        tags: [],
-      });
+      setEntryData(emptySessionForm());
       onClose();
     } catch (e) {
       console.error('Save session entry failed', e);
@@ -150,11 +167,14 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-widest text-accent">Session log</p>
-                <h2 className="text-2xl readable-accent truncate text-foreground">Log today&apos;s play</h2>
+                <h2 className="text-2xl readable-accent truncate text-foreground">
+                  {isEditing ? 'Edit session' : "Log today's play"}
+                </h2>
                 <p className="text-muted-foreground truncate">{game.title}</p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Built for multiplayer and live games — ranks, mood, tags, and notes. No story progress bar
-                  here.
+                  {isEditing
+                    ? 'Update ranks, mood, tags, and notes for this session.'
+                    : 'Built for multiplayer and live games — ranks, mood, tags, and notes. No story progress bar here.'}
                 </p>
               </div>
             </div>
@@ -244,19 +264,11 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm readable-text">
-              <Image className="w-4 h-4 inline mr-2" />
-              Screenshot URL (optional)
-            </label>
-            <input
-              type="url"
-              value={entryData.screenshot}
-              onChange={(e) => setEntryData((prev) => ({ ...prev, screenshot: e.target.value }))}
-              placeholder="https://…"
-              className="w-full px-4 py-3 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-accent/30"
-            />
-          </div>
+          <ScreenshotUploader
+            value={entryData.screenshots}
+            onChange={(screenshots) => setEntryData((prev) => ({ ...prev, screenshots }))}
+            disabled={saving}
+          />
 
           <div className="space-y-2">
             <label className="block text-sm readable-text">Tags</label>
@@ -324,7 +336,7 @@ const JournalSessionEntryModal: React.FC<JournalSessionEntryModalProps> = ({
               className="px-6 py-2.5 min-h-11 rounded-xl bg-accent/20 text-accent border border-accent/50 hover:bg-accent/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             >
               <Save className="w-4 h-4 inline mr-2" />
-              {saving ? 'Saving…' : 'Save session'}
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Save session'}
             </button>
           </div>
         </div>

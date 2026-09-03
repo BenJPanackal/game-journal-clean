@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   X,
   Save,
-  Image,
   Trophy,
   MapPin,
   Sword,
@@ -11,32 +10,46 @@ import {
   TrendingUp,
   AlertTriangle,
 } from 'lucide-react';
-import type { NewJournalEntryPayload } from '../lib/libraryUi';
+import type { JournalRowEntry, NewJournalEntryPayload } from '../lib/libraryUi';
 import { journalFieldLabels } from '../lib/libraryUi';
 import type { UiGame } from '../lib/libraryUi';
+import type { EntryScreenshot } from '../api/library';
+import ScreenshotUploader from './ScreenshotUploader';
 
 interface JournalEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (payload: NewJournalEntryPayload) => void | Promise<void | 'deferred'>;
   game: UiGame | null;
+  /** When set, modal prefills and saves as an update (no game progress sync). */
+  initialEntry?: JournalRowEntry | null;
 }
 
-const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, onSave, game }) => {
-  const gameProgress = game?.progress ?? 0;
+const emptyForm = (gameProgress: number) => ({
+  title: '',
+  areaExplored: '',
+  bossDefeated: '',
+  itemFound: '',
+  notes: '',
+  mood: 'neutral',
+  sessionLength: '',
+  progress: String(gameProgress),
+  tags: [] as string[],
+  screenshots: [] as EntryScreenshot[],
+});
 
-  const [entryData, setEntryData] = useState({
-    title: '',
-    areaExplored: '',
-    bossDefeated: '',
-    itemFound: '',
-    screenshot: '',
-    notes: '',
-    mood: 'neutral',
-    sessionLength: '',
-    progress: String(gameProgress),
-    tags: [] as string[]
-  });
+const JournalEntryModal: React.FC<JournalEntryModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  game,
+  initialEntry = null,
+}) => {
+  const gameProgress = game?.progress ?? 0;
+  const isEditing = initialEntry != null;
+
+  const [entryData, setEntryData] = useState(() => emptyForm(gameProgress));
+  const [entryDate, setEntryDate] = useState(() => new Date().toISOString());
 
   const [activeTag, setActiveTag] = useState('');
   const [progressError, setProgressError] = useState('');
@@ -47,12 +60,33 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
   useEffect(() => {
     if (!isOpen || !game) return;
-    setEntryData((prev) => ({ ...prev, progress: String(game.progress ?? 0) }));
+    if (initialEntry) {
+      setEntryData({
+        title: initialEntry.title,
+        areaExplored: initialEntry.areaExplored,
+        bossDefeated: initialEntry.bossDefeated,
+        itemFound: initialEntry.itemFound,
+        notes: initialEntry.content,
+        mood: initialEntry.mood || 'neutral',
+        sessionLength: initialEntry.sessionLength,
+        progress:
+          initialEntry.progressAtEntry != null
+            ? String(initialEntry.progressAtEntry)
+            : '',
+        tags: [...initialEntry.tags],
+        screenshots: (initialEntry.screenshots || []).filter((s) => s.id !== 'legacy'),
+      });
+      setEntryDate(initialEntry.date);
+    } else {
+      setEntryData(emptyForm(game.progress ?? 0));
+      setEntryDate(new Date().toISOString());
+    }
+    setActiveTag('');
     setProgressError('');
     setCompletionRating(8);
     setCompletionMemory('');
     setCompletionError('');
-  }, [isOpen, game?.id, game?.progress]);
+  }, [isOpen, game?.id, game?.progress, initialEntry]);
 
   // Ordered from happy to unhappy with neutral in middle - Fixed neutral color
   const moods = [
@@ -67,28 +101,27 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
   const handleProgressChange = (value: string) => {
     const numValue = parseFloat(value);
-    console.log('📊 Progress changed to:', numValue, 'Current game progress:', gameProgress);
-    
+
     if (value === '') {
-      setEntryData(prev => ({ ...prev, progress: '' }));
+      setEntryData((prev) => ({ ...prev, progress: '' }));
       setProgressError('');
       return;
     }
 
     if (isNaN(numValue) || numValue < 0 || numValue > 100) {
       setProgressError('Progress must be between 0 and 100');
-      setEntryData(prev => ({ ...prev, progress: value }));
+      setEntryData((prev) => ({ ...prev, progress: value }));
       return;
     }
 
-    if (numValue < gameProgress) {
+    if (!isEditing && numValue < gameProgress) {
       setProgressError(`Progress cannot be lower than current progress (${gameProgress}%)`);
-      setEntryData(prev => ({ ...prev, progress: value }));
+      setEntryData((prev) => ({ ...prev, progress: value }));
       return;
     }
 
     setProgressError('');
-    setEntryData(prev => ({ ...prev, progress: value }));
+    setEntryData((prev) => ({ ...prev, progress: value }));
   };
 
   const labels = journalFieldLabels('story');
@@ -102,6 +135,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
       ? gameProgress
       : effectiveProgress;
   const needsCompletionSurvey =
+    !isEditing &&
     parsedProgress >= 100 &&
     game != null &&
     !['completed', 'dud'].includes(game.category);
@@ -121,16 +155,23 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
 
     const progressNum = entryData.progress === '' ? null : parseFloat(entryData.progress);
     const progressAtEntry =
-      progressNum != null && !Number.isNaN(progressNum) ? progressNum : gameProgress;
+      isEditing
+        ? progressNum != null && !Number.isNaN(progressNum)
+          ? progressNum
+          : null
+        : progressNum != null && !Number.isNaN(progressNum)
+          ? progressNum
+          : gameProgress;
     const payload: NewJournalEntryPayload = {
       title: entryData.title.trim(),
-      entryDate: new Date().toISOString(),
+      entryDate: isEditing ? entryDate : new Date().toISOString(),
       areaExplored: entryData.areaExplored.trim() || null,
       bossDefeated: entryData.bossDefeated.trim() || null,
       itemFound: entryData.itemFound.trim() || null,
       rankBefore: null,
       rankAfter: null,
-      screenshotUrl: entryData.screenshot.trim() || null,
+      screenshotUrl: entryData.screenshots[0]?.url ?? null,
+      screenshotIds: entryData.screenshots.map((s) => s.id),
       notes: entryData.notes.trim() || null,
       mood: entryData.mood,
       sessionLength: entryData.sessionLength.trim() || null,
@@ -151,18 +192,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
         onClose();
         return;
       }
-      setEntryData({
-        title: '',
-        areaExplored: '',
-        bossDefeated: '',
-        itemFound: '',
-        screenshot: '',
-        notes: '',
-        mood: 'neutral',
-        sessionLength: '',
-        progress: String(game.progress ?? 0),
-        tags: [],
-      });
+      setEntryData(emptyForm(game.progress ?? 0));
       setProgressError('');
       setCompletionRating(8);
       setCompletionMemory('');
@@ -234,11 +264,13 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               />
               <div>
                 <h2 className="text-2xl readable-accent" style={{ color: game.colors.primary }}>
-                  New Journal Entry
+                  {isEditing ? 'Edit Journal Entry' : 'New Journal Entry'}
                 </h2>
                 <p className="text-muted-foreground">{game.title}</p>
                 <p className="text-xs text-muted-foreground/90 mt-1">
-                  Story-style entry — areas, bosses, and progress
+                  {isEditing
+                    ? 'Update notes and details — game progress is not changed'
+                    : 'Story-style entry — areas, bosses, and progress'}
                 </p>
               </div>
             </div>
@@ -307,7 +339,9 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
                 </div>
               )}
               <div className="text-xs text-muted-foreground">
-                Current: {gameProgress}%
+                {isEditing
+                  ? 'Stored on this entry only (does not update game progress)'
+                  : `Current: ${gameProgress}%`}
               </div>
             </div>
             <div className="space-y-2">
@@ -433,20 +467,12 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
             </div>
           </div>
 
-          {/* Screenshot */}
-          <div className="space-y-2">
-            <label className="block text-sm readable-text">
-              <Image className="w-4 h-4 inline mr-2" />
-              Screenshot URL (Optional)
-            </label>
-            <input
-              type="url"
-              value={entryData.screenshot}
-              onChange={(e) => setEntryData(prev => ({ ...prev, screenshot: e.target.value }))}
-              placeholder="https://example.com/screenshot.jpg"
-              className="w-full px-4 py-3 bg-input/50 border border-border/50 rounded-lg readable-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 smooth-transition"
-            />
-          </div>
+          {/* Screenshots */}
+          <ScreenshotUploader
+            value={entryData.screenshots}
+            onChange={(screenshots) => setEntryData((prev) => ({ ...prev, screenshots }))}
+            disabled={saving}
+          />
 
           {/* Tags */}
           <div className="space-y-2">
@@ -530,7 +556,7 @@ const JournalEntryModal: React.FC<JournalEntryModalProps> = ({ isOpen, onClose, 
               className="px-6 py-2.5 min-h-11 rounded-xl bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 disabled:opacity-50 disabled:cursor-not-allowed fast-transition interactive-hover font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
               <Save className="w-4 h-4 inline mr-2" />
-              {saving ? 'Saving…' : 'Save Entry'}
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Save Entry'}
             </button>
           </div>
         </div>
