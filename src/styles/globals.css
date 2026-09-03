@@ -5,30 +5,30 @@
 
 :root {
   /* Enhanced Vaporwave Color Palette */
-  --background: oklch(0.06 0.03 285); /* Deeper purple-blue */
-  --foreground: oklch(0.98 0.08 315); /* Brighter pink-white */
+  --background: oklch(0.06 0.03 285);
+  --foreground: oklch(0.98 0.08 315);
   --card: oklch(0.09 0.04 285);
   --card-foreground: oklch(0.92 0.07 315);
   --popover: oklch(0.09 0.04 285);
   --popover-foreground: oklch(0.92 0.07 315);
-  --primary: oklch(0.75 0.35 325); /* More saturated neon pink */
+  --primary: oklch(0.75 0.35 325);
   --primary-foreground: oklch(0.98 0.05 325);
-  --secondary: oklch(0.65 0.25 180); /* Electric cyan */
+  --secondary: oklch(0.65 0.25 180);
   --secondary-foreground: oklch(0.98 0.05 180);
   --muted: oklch(0.13 0.04 285);
   --muted-foreground: oklch(0.65 0.12 300);
-  --accent: oklch(0.70 0.30 270); /* Electric purple */
+  --accent: oklch(0.70 0.30 270);
   --accent-foreground: oklch(0.98 0.05 270);
-  --destructive: oklch(0.65 0.35 15); /* Neon orange-red */
+  --destructive: oklch(0.65 0.35 15);
   --destructive-foreground: oklch(0.98 0.05 15);
   --border: oklch(0.25 0.08 285);
   --input: oklch(0.11 0.04 285);
   --ring: oklch(0.75 0.35 325);
-  --chart-1: oklch(0.75 0.35 325); /* Neon pink */
-  --chart-2: oklch(0.65 0.25 180); /* Electric cyan */
-  --chart-3: oklch(0.70 0.30 270); /* Electric purple */
-  --chart-4: oklch(0.70 0.30 120); /* Electric green */
-  --chart-5: oklch(0.75 0.30 60); /* Electric yellow */
+  --chart-1: oklch(0.75 0.35 325);
+  --chart-2: oklch(0.65 0.25 180);
+  --chart-3: oklch(0.70 0.30 270);
+  --chart-4: oklch(0.70 0.30 120);
+  --chart-5: oklch(0.75 0.30 60);
   --radius: 0.5rem;
   --sidebar: oklch(0.08 0.04 285);
   --sidebar-foreground: oklch(0.92 0.07 315);
@@ -38,8 +38,7 @@
   --sidebar-accent-foreground: oklch(0.92 0.07 315);
   --sidebar-border: oklch(0.25 0.08 285);
   --sidebar-ring: oklch(0.75 0.35 325);
-  
-  /* Enhanced Vaporwave Variables */
+
   --neon-pink: oklch(0.75 0.35 325);
   --neon-cyan: oklch(0.65 0.25 180);
   --neon-purple: oklch(0.70 0.30 270);
@@ -47,11 +46,8 @@
   --neon-yellow: oklch(0.75 0.30 60);
   --neon-orange: oklch(0.70 0.35 40);
   --grid-color: oklch(0.35 0.20 325);
-  
-  /* Neutral mood color */
-  --neutral: oklch(0.60 0.15 250); /* Soft purple-gray */
-  
-  /* Letdowns color - Deep red-purple */
+
+  --neutral: oklch(0.60 0.15 250);
   --letdowns: oklch(0.55 0.25 340);
 }
 
@@ -145,7 +141,7 @@
     @apply bg-background text-foreground antialiased;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
-    background-image: 
+    background-image:
       linear-gradient(rgba(255, 0, 255, 0.03) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 0, 255, 0.03) 1px, transparent 1px),
       linear-gradient(45deg, transparent 35%, rgba(0, 255, 255, 0.05) 35%, rgba(0, 255, 255, 0.05) 65%, transparent 65%),
@@ -223,11 +219,11 @@
   /* Text legibility improvements */
   .readable-text {
     color: var(--foreground);
-    text-shadow: 
+    text-shadow:
       0 1px 0 rgba(0, 0, 0, 0.8),
       0 2px 4px rgba(0, 0, 0, 0.3);
   }
-  
+
   .readable-accent {
     color: var(--primary);
     text-shadow:
@@ -261,7 +257,7 @@
     backdrop-filter: blur(0.5px);
     border-radius: 0.5rem;
   }
-  
+
   .completed-glow {
     animation: completed-glow 2s ease-in-out infinite;
     backdrop-filter: blur(0.5px);
@@ -302,8 +298,7 @@
     z-index: 1;
     pointer-events: none;
   }
-  
-  /* Enhanced visual hierarchy */
+
   .z-depth-1 {
     box-shadow:
       0 1px 2px color-mix(in oklch, black 45%, transparent),
@@ -382,33 +377,13 @@
   .scrollable-tabs::-webkit-scrollbar-thumb:hover {
     background: color-mix(in oklch, var(--primary) 55%, transparent);
   }
-  
-  /* Journal specific styles */
+
   .journal-card {
     background: color-mix(in oklch, var(--card) 82%, transparent);
     backdrop-filter: blur(12px) saturate(1.15);
     border: 1px solid color-mix(in oklch, var(--primary) 22%, transparent);
   }
 
-  /** Dashboard main column — same glass language, less neon on the rim */
-  .journal-card.journal-card-dashboard {
-    border-color: color-mix(in oklch, var(--primary) 14%, transparent);
-  }
-
-  .journal-card.journal-card-dashboard.z-depth-2 {
-    box-shadow:
-      0 2px 6px color-mix(in oklch, black 38%, transparent),
-      0 0 0 1px color-mix(in oklch, var(--primary) 7%, transparent),
-      0 0 20px color-mix(in oklch, var(--primary) 5%, transparent);
-  }
-
-  .journal-card.journal-card-dashboard.z-depth-3 {
-    box-shadow:
-      0 4px 10px color-mix(in oklch, black 40%, transparent),
-      0 0 0 1px color-mix(in oklch, var(--primary) 9%, transparent),
-      0 0 28px color-mix(in oklch, var(--primary) 6%, transparent);
-  }
-  
   .journal-text {
     line-height: 1.6;
     color: var(--muted-foreground);
@@ -664,7 +639,6 @@
   background: color-mix(in oklch, var(--primary) 52%, transparent);
 }
 
-/* Dashboard recent games — fixed viewport (~5 cards), theme scroll */
 .recent-games-scroll {
   max-height: min(58rem, calc(100vh - 14rem));
   overflow-y: auto;
@@ -698,4 +672,12 @@
     color-mix(in oklch, var(--primary) 70%, transparent),
     color-mix(in oklch, var(--accent) 55%, transparent)
   );
+}
+
+.neon-icon {
+  filter: drop-shadow(0 0 3px color-mix(in oklch, currentColor 40%, transparent));
+}
+.neon-icon-strong {
+  filter: drop-shadow(0 0 5px color-mix(in oklch, currentColor 55%, transparent))
+    drop-shadow(0 0 10px color-mix(in oklch, currentColor 20%, transparent));
 }

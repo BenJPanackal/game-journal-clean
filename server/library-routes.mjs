@@ -2,16 +2,25 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { CATEGORIES, JOURNAL_MODES, rowToGame, rowToEntry } from './db.mjs';
+import { backfillMissingCovers } from './igdb-cover.mjs';
 
 function badRequest(res, message) {
   return res.status(400).json({ error: message });
 }
 
-export function createLibraryRouter(db) {
+/**
+ * @param {import('better-sqlite3').Database} db
+ * @param {{ igdb?: { getAccessToken: () => Promise<string>, resolveTwitchCredentials: () => { clientId: string } | null, hasIgdbCredentials: () => boolean } }} [options]
+ */
+export function createLibraryRouter(db, options = {}) {
   const r = Router();
+  const igdb = options.igdb ?? null;
 
-  r.get('/library', (req, res) => {
+  r.get('/library', async (req, res) => {
     try {
+      if (igdb) {
+        await backfillMissingCovers(db, igdb);
+      }
       const games = db.prepare('SELECT * FROM games ORDER BY updated_at DESC').all().map(rowToGame);
       const entries = db.prepare('SELECT * FROM journal_entries ORDER BY entry_date DESC').all().map(rowToEntry);
       res.json({ games, entries });

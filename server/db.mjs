@@ -136,6 +136,51 @@ function ensureSchema(db) {
       db.prepare('UPDATE app_profile SET onboarding_complete = 1 WHERE singleton = 1').run();
     }
   }
+
+  if (!columnExists(db, 'app_profile', 'llm_provider')) {
+    db.exec(`ALTER TABLE app_profile ADD COLUMN llm_provider TEXT NOT NULL DEFAULT 'none'`);
+  }
+  if (!columnExists(db, 'app_profile', 'llm_api_key')) {
+    db.exec('ALTER TABLE app_profile ADD COLUMN llm_api_key TEXT');
+  }
+  if (!columnExists(db, 'app_profile', 'ollama_base_url')) {
+    db.exec(
+      `ALTER TABLE app_profile ADD COLUMN ollama_base_url TEXT NOT NULL DEFAULT 'http://127.0.0.1:11434'`
+    );
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_guide_sources (
+      igdb_id INTEGER PRIMARY KEY,
+      wiki_base_url TEXT,
+      wiki_source_type TEXT,
+      official_url TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS guide_chunks (
+      id TEXT PRIMARY KEY,
+      igdb_id INTEGER NOT NULL,
+      source_url TEXT NOT NULL UNIQUE,
+      source_type TEXT NOT NULL,
+      title TEXT,
+      content TEXT NOT NULL,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_guide_chunks_igdb ON guide_chunks(igdb_id);
+
+    CREATE TABLE IF NOT EXISTS guide_query_cache (
+      id TEXT PRIMARY KEY,
+      igdb_id INTEGER NOT NULL,
+      question_norm TEXT NOT NULL,
+      include_community INTEGER NOT NULL DEFAULT 0,
+      answer_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_guide_query_lookup ON guide_query_cache(igdb_id, question_norm, include_community);
+  `);
 }
 
 export function openDatabase() {

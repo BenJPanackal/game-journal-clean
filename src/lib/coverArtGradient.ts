@@ -532,7 +532,9 @@ export function getCoverPalette(coverUrl: string): Promise<CoverPalette | null> 
 
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // Do not set crossOrigin — IGDB image CDN does not send Access-Control-Allow-Origin.
+    // A CORS-mode preload can break normal <img> loads of the same URL in some browsers.
+    // Canvas sampling fails without CORS; callers fall back to theme colors.
     const done = (value: CoverPalette | null) => {
       if (value) cache.set(key, value);
       resolve(value);

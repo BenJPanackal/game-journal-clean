@@ -30,6 +30,8 @@ export default function ProfileSetupModal({
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [profileImageUrl, setProfileImageUrl] = useState('');
+  const [llmProvider, setLlmProvider] = useState('none');
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://127.0.0.1:11434');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +42,8 @@ export default function ProfileSetupModal({
     const done = initialProfile?.onboardingComplete;
     setDisplayName(initialProfile?.displayName ?? '');
     setProfileImageUrl(initialProfile?.profileImageUrl ?? '');
+    setLlmProvider(initialProfile?.llmProvider ?? 'none');
+    setOllamaBaseUrl(initialProfile?.ollamaBaseUrl ?? 'http://127.0.0.1:11434');
     setClientId('');
     setClientSecret('');
     setStep(done ? 2 : 0);
@@ -81,6 +85,8 @@ export default function ProfileSetupModal({
         displayName: displayName.trim() || null,
         profileImageUrl: profileImageUrl.trim() || null,
         onboardingComplete: true,
+        llmProvider,
+        ollamaBaseUrl: ollamaBaseUrl.trim() || 'http://127.0.0.1:11434',
       };
       if (a && b) {
         patch.twitchClientId = a;
@@ -103,6 +109,8 @@ export default function ProfileSetupModal({
       const p = await patchProfile({
         displayName: displayName.trim() || null,
         profileImageUrl: profileImageUrl.trim() || null,
+        llmProvider,
+        ollamaBaseUrl: ollamaBaseUrl.trim() || 'http://127.0.0.1:11434',
       });
       onSaved(p);
       onClose();
@@ -357,6 +365,36 @@ export default function ProfileSetupModal({
                 />
               </div>
             )}
+
+            <div className="pt-2 border-t border-border/50 space-y-2">
+              <p className="text-xs text-muted-foreground">Game guide AI (optional — wiki answers work without this)</p>
+              <label className="block text-xs text-muted-foreground">
+                LLM provider
+                <select
+                  value={llmProvider}
+                  onChange={(e) => setLlmProvider(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 rounded-md bg-input/50 border border-border text-sm readable-text"
+                >
+                  <option value="none">None — wiki facts only</option>
+                  <option value="ollama">Ollama (local, free)</option>
+                </select>
+              </label>
+              {llmProvider === 'ollama' && (
+                <label className="block text-xs text-muted-foreground">
+                  Ollama URL
+                  <input
+                    value={ollamaBaseUrl}
+                    onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                    className="mt-1 w-full px-3 py-2 rounded-md bg-input/50 border border-border text-sm readable-text"
+                    placeholder="http://127.0.0.1:11434"
+                  />
+                </label>
+              )}
+              <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                Install Ollama and pull a model (e.g. <code className="text-foreground">llama3.2:3b</code>) to
+                optionally rephrase wiki excerpts on the journal guide panel.
+              </p>
+            </div>
 
             <div className="flex gap-2">
               <button

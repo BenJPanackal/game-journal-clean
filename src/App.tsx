@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Heart, Clock, Bookmark, Star, Gamepad2, Trophy, Target, Plus, Minus, X, Edit3, MapPin, Sword, Flame, TrendingUp, Database, ThumbsDown, ChevronDown, ChevronUp, Trash2, RotateCcw, Settings } from 'lucide-react';
+import { Heart, Clock, Bookmark, Star, Trophy, Plus, Minus, X, Edit3, MapPin, Sword, Flame, Trash2, ChevronDown, ChevronUp, Gamepad2 } from 'lucide-react';
 import JournalPage from './components/JournalPage';
 import JournalEntryModal from './components/JournalEntryModal';
 import JournalSessionEntryModal from './components/JournalSessionEntryModal';
@@ -8,6 +8,24 @@ import CompletionSurveyModal from './components/CompletionSurveyModal';
 import ProfileSetupModal from './components/ProfileSetupModal';
 import IgdbSearch from "./components/IgdbSearch";
 import type { IgdbGame } from "./components/IgdbSearch";
+import {
+  IconInProgress,
+  IconCompleted,
+  IconSettingsKeys,
+  IconIgdbCatalog,
+  IconStreakLink,
+  IconWeekTimer,
+  IconGameStack,
+  IconDayPulse,
+  IconHourglass,
+  IconRecent,
+  IconFavoriteRibbon,
+  IconLibraryShelf,
+  IconDudCase,
+  IconSearch,
+  IconEmptyShelf,
+} from './components/icons';
+import type { NeonIconProps } from './components/icons';
 import { fetchProfile, type AppProfile } from './api/profile';
 import { createEntry, deleteGame, fetchLibrary, patchGame, postGame } from './api/library';
 import type { JournalMode, LibraryCategory, LibraryEntry, LibraryGame } from './api/library';
@@ -55,7 +73,6 @@ const SidebarGameCard = ({
           <img
             src={game.cover}
             alt={game.title}
-            crossOrigin="anonymous"
             className="w-10 h-14 object-cover rounded border border-primary/20"
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
@@ -119,7 +136,7 @@ const SidebarGameCard = ({
                   title="Mark as dud"
                   aria-label="Mark as dud"
                 >
-                  <ThumbsDown className="w-3 h-3" />
+                  <IconDudCase className="w-3 h-3 neon-icon" />
                 </button>
               )}
               {onRestoreFromDud && (
@@ -133,7 +150,7 @@ const SidebarGameCard = ({
                   title="Move back to completed"
                   aria-label="Move back to completed"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <IconCompleted className="w-3 h-3 neon-icon" />
                 </button>
               )}
               <button
@@ -199,14 +216,13 @@ const MainGameCard = ({
         console.log('🎮 Main game card clicked:', game.title);
         onClick();
       }}
-      className={`journal-card journal-card-dashboard hover:border-primary/50 smooth-transition interactive-hover ${zDepth} rounded-lg overflow-hidden ${cardSize} ${isLargest ? 'ring-1 ring-primary/20' : ''}`}
+      className={`journal-card hover:border-primary/50 smooth-transition interactive-hover ${zDepth} rounded-lg overflow-hidden ${cardSize} ${isLargest ? 'ring-2 ring-primary/40 vhs-glow' : ''}`}
     >
       <div className="flex gap-6">
         <div className="relative flex-shrink-0">
           <img
             src={game.cover}
             alt={game.title}
-            crossOrigin="anonymous"
             className={`${imageSize} object-cover rounded-lg border border-primary/20 z-depth-1 shadow-lg`}
             onError={(e) => {
               e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
@@ -479,18 +495,23 @@ export default function App() {
     return [];
   }, [libraryGames, activeCategory, activeTab, sidebarSearchQuery]);
 
-  const getAvailableTabs = () => {
+  const getAvailableTabs = (): {
+    id: string;
+    label: string;
+    icon: React.ComponentType<NeonIconProps>;
+    color: string;
+  }[] => {
     if (activeCategory === 'completed') {
       return [
-        { id: 'completed', label: 'Done', icon: Trophy, color: 'green-600' },
-        { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
-        { id: 'duds', label: 'Duds', icon: ThumbsDown, color: 'letdowns' },
+        { id: 'completed', label: 'Done', icon: IconCompleted, color: 'green-600' },
+        { id: 'favorite', label: 'Favs', icon: IconFavoriteRibbon, color: 'destructive' },
+        { id: 'duds', label: 'Duds', icon: IconDudCase, color: 'letdowns' },
       ];
     }
     return [
-      { id: 'recent', label: 'Recent', icon: Clock, color: 'secondary' },
-      { id: 'favorite', label: 'Favs', icon: Heart, color: 'destructive' },
-      { id: 'library', label: 'Library', icon: Bookmark, color: 'accent' },
+      { id: 'recent', label: 'Recent', icon: IconRecent, color: 'secondary' },
+      { id: 'favorite', label: 'Favs', icon: IconFavoriteRibbon, color: 'destructive' },
+      { id: 'library', label: 'Library', icon: IconLibraryShelf, color: 'accent' },
     ];
   };
 
@@ -868,7 +889,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Left Sidebar */}
-      <div className="w-80 bg-sidebar border-r border-sidebar-border z-depth-2 flex flex-col scanlines">
+      <div className="w-80 bg-sidebar border-r border-sidebar-border z-depth-2 flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-sidebar-border">
           <h1 className="text-2xl text-primary readable-accent mb-2">
@@ -905,7 +926,7 @@ export default function App() {
               title="Profile & Twitch / IGDB keys"
               aria-label="Profile and IGDB setup"
             >
-              <Settings className="w-4 h-4 text-muted-foreground" />
+              <IconSettingsKeys className="w-4 h-4 text-muted-foreground neon-icon" />
             </button>
           </div>
         </div>
@@ -918,7 +939,7 @@ export default function App() {
               activeCategory === 'inprogress' ? 'ring-2 ring-secondary/50 bg-secondary/10' : ''
             }`}
           >
-            <Target className="w-4 h-4 mx-auto mb-1 text-secondary" />
+            <IconInProgress className="w-4 h-4 mx-auto mb-1 text-secondary neon-icon-strong" />
             <p className="text-xs text-muted-foreground">In Progress</p>
             <p className="text-secondary">{inProgressCount}</p>
           </div>
@@ -928,7 +949,7 @@ export default function App() {
               activeCategory === 'completed' ? 'ring-2 ring-destructive/50 bg-destructive/10' : ''
             }`}
           >
-            <Trophy className="w-4 h-4 mx-auto mb-1 text-destructive" />
+            <IconCompleted className="w-4 h-4 mx-auto mb-1 text-destructive neon-icon-strong" />
             <p className="text-xs text-muted-foreground">Completed</p>
             <p className="text-destructive">{tabCounts.completed}</p>
           </div>
@@ -944,11 +965,16 @@ export default function App() {
               {availableTabs.map(tab => {
                 const IconComponent = tab.icon;
                 const isActive = activeTab === tab.id;
-                const colorClass = tab.color === 'green-600' ? 'bg-green-600 text-white' : 
-                                 tab.color === 'letdowns' ? 'bg-letdowns text-white' :
-                                 tab.color === 'destructive' ? 'bg-destructive text-destructive-foreground' :
-                                 tab.color === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                                 'bg-accent text-accent-foreground';
+                const colorClass =
+                  tab.color === 'green-600'
+                    ? 'bg-green-600 text-white'
+                    : tab.color === 'letdowns'
+                      ? 'bg-letdowns text-white'
+                      : tab.color === 'destructive'
+                        ? 'bg-destructive text-destructive-foreground'
+                        : tab.color === 'secondary'
+                          ? 'bg-secondary text-secondary-foreground'
+                          : 'bg-accent text-accent-foreground';
                 
                 return (
                   <button
@@ -961,7 +987,7 @@ export default function App() {
                         : 'hover:bg-muted text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <IconComponent className="w-3 h-3" />
+                    <IconComponent className="w-3.5 h-3.5 neon-icon" />
                     <span>{tab.label}</span>
                     {!isActive && (
                       <Badge className={`ml-1 text-xs ${
@@ -994,7 +1020,7 @@ export default function App() {
         {/* Sidebar Search */}
         <div className="px-4 pt-4 pb-4 border-b border-sidebar-border/50">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+            <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground neon-icon" />
             <input
               type="text"
               placeholder={`Search ${activeTab}...`}
@@ -1070,7 +1096,7 @@ export default function App() {
               ))}
               {sidebarFilteredGames.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
-                  <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <IconEmptyShelf className="w-8 h-8 mx-auto mb-2 opacity-50 neon-icon" />
                   <p>
                     No{' '}
                     {activeTab === 'library'
@@ -1095,7 +1121,7 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Streamlined Header Layout - Removed Journey Card */}
-        <div className="bg-card/20 border-b border-border z-depth-2 p-6">
+        <div className="bg-card/30 border-b border-primary/25 z-depth-2 p-6">
           <div className="flex items-center justify-between">
             {/* Left Side - Dashboard info and enhanced stats row */}
             <div className="flex items-center gap-12">
@@ -1114,17 +1140,17 @@ export default function App() {
               {/* Enhanced Quick Stats Row - Clarified weekly context */}
               <div className="flex items-center gap-8 text-sm">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-secondary" />
+                  <IconStreakLink className="w-4 h-4 text-secondary neon-icon" />
                   <span className="text-muted-foreground">Active Streaks:</span>
                   <span className="text-secondary">{activeStreaks}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-accent" />
+                  <IconWeekTimer className="w-4 h-4 text-accent neon-icon" />
                   <span className="text-muted-foreground">This Week:</span>
                   <span className="text-accent">{weeklyHours === '—' ? weeklyHours : `${weeklyHours}h`}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Gamepad2 className="w-4 h-4 text-primary" />
+                  <IconGameStack className="w-4 h-4 text-primary neon-icon" />
                   <span className="text-muted-foreground">Games This Week:</span>
                   <span className="text-primary">{gamesPlayedThisWeek}</span>
                 </div>
@@ -1134,12 +1160,12 @@ export default function App() {
             {/* Right Side - Daily Streak and Total Hours in upper right corner */}
             <div className="flex gap-4">
               <div className="journal-card z-depth-1 rounded-lg p-4 text-center min-w-[100px]">
-                <Flame className="w-5 h-5 mx-auto mb-1 text-destructive" />
+                <IconDayPulse className="w-5 h-5 mx-auto mb-1 text-destructive neon-icon-strong" />
                 <p className="text-xs text-muted-foreground">Daily Streak</p>
                 <p className="text-destructive">—</p>
               </div>
               <div className="journal-card z-depth-1 rounded-lg p-4 text-center min-w-[100px]">
-                <Star className="w-5 h-5 mx-auto mb-1 text-secondary" />
+                <IconHourglass className="w-5 h-5 mx-auto mb-1 text-secondary neon-icon-strong" />
                 <p className="text-xs text-muted-foreground">Total Hours</p>
                 <p className="text-secondary">{totalHours}h</p>
               </div>
@@ -1162,7 +1188,7 @@ export default function App() {
             <div className="igdb-search-section rounded-lg p-5 z-depth-2">
               <div className="text-center mb-5">
                 <div className="flex items-center justify-center gap-2 mb-2">
-                  <Database className="w-5 h-5 text-primary" />
+                  <IconIgdbCatalog className="w-5 h-5 text-primary neon-icon-strong" />
                   <h3 className="text-xl igdb-search-label">IGDB Game Browser</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">Search and discover games from the Internet Game Database</p>
@@ -1232,9 +1258,9 @@ export default function App() {
                 </div>
                 
                 <div
-                  className={`journal-card journal-card-dashboard z-depth-2 rounded-lg p-6 space-y-4 ${
+                  className={`journal-card z-depth-2 rounded-lg p-6 space-y-4 ${
                     latestEntry
-                      ? 'cursor-pointer hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/15 smooth-transition'
+                      ? 'cursor-pointer hover:bg-primary/5 focus-within:ring-2 focus-within:ring-primary/30 smooth-transition vhs-glow'
                       : ''
                   }`}
                   role={latestEntry ? 'button' : undefined}

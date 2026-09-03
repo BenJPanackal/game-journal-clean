@@ -16,6 +16,7 @@ import {
 import JournalEntryModal from './JournalEntryModal';
 import JournalEntryViewModal from './JournalEntryViewModal';
 import JournalSessionEntryModal from './JournalSessionEntryModal';
+import GameGuidePanel from './GameGuidePanel';
 import type { JournalRowEntry } from '../lib/libraryUi';
 import type { NewJournalEntryPayload } from '../lib/libraryUi';
 import { apiEntryToJournalRow, journalFieldLabels } from '../lib/libraryUi';
@@ -102,7 +103,6 @@ const JournalPage: React.FC<JournalPageProps> = ({
               <img
                 src={game.cover}
                 alt={game.title}
-                crossOrigin="anonymous"
                 className="w-16 h-20 object-cover rounded-lg border border-primary/20 z-depth-1"
                 onError={(e) => {
                   e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=300&h=400&fit=crop';
@@ -272,6 +272,8 @@ const JournalPage: React.FC<JournalPageProps> = ({
       {/* Journal Entries */}
       <div className="p-6">
         <div className="max-w-4xl mx-auto space-y-6">
+          <GameGuidePanel gameId={game.id} gameTitle={game.title} />
+
           <div className="flex items-center justify-between">
             <h2 className="text-2xl text-primary readable-accent">Journal Entries</h2>
             <button 

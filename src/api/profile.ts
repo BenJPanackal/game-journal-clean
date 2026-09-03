@@ -6,6 +6,9 @@ export type AppProfile = {
   hasTwitchCredentials: boolean;
   onboardingComplete: boolean;
   credentialSource: 'database' | 'environment' | 'none';
+  llmProvider: string;
+  hasLlmConfigured: boolean;
+  ollamaBaseUrl: string;
 };
 
 export async function fetchProfile(): Promise<AppProfile> {
@@ -23,6 +26,9 @@ export type PatchProfileBody = {
   twitchClientId?: string | null;
   twitchClientSecret?: string | null;
   onboardingComplete?: boolean;
+  llmProvider?: string;
+  llmApiKey?: string | null;
+  ollamaBaseUrl?: string | null;
 };
 
 export async function patchProfile(body: PatchProfileBody): Promise<AppProfile> {

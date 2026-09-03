@@ -9,6 +9,7 @@ import axios from 'axios';
 import { openDatabase } from './db.mjs';
 import { createLibraryRouter } from './library-routes.mjs';
 import { createSettingsRouter } from './settings-routes.mjs';
+import { createGuideRouter } from './guide-routes.mjs';
 import { credentialSource, hasIgdbCredentials, resolveTwitchCredentials } from './twitch-credentials.mjs';
 
 const app = express();
@@ -19,7 +20,6 @@ app.use(express.json());
 app.use(express.text({ type: 'text/plain' })); // also accept text/plain
 
 const db = openDatabase();
-app.use('/api', createLibraryRouter(db));
 
 /** Default 3001 so Vite never steals this port when 5173 is busy. Set PORT in .env to override. */
 const PORT = Number(process.env.PORT) || 3001;
@@ -86,6 +86,14 @@ async function getAccessToken() {
   tokenExpiresAt = now + tokenRes.data.expires_in * 1000;
   return accessToken;
 }
+
+const igdbDeps = {
+  getAccessToken,
+  resolveTwitchCredentials: () => resolveTwitchCredentials(db),
+  hasIgdbCredentials: () => hasIgdbCredentials(db),
+};
+app.use('/api', createLibraryRouter(db, { igdb: igdbDeps }));
+app.use('/api', createGuideRouter(db, igdbDeps));
 
 function yearFromUnix(unixSeconds) {
   if (!unixSeconds) return null;
@@ -299,7 +307,18 @@ limit 1;`,
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✅ API + IGDB proxy running on http://localhost:${PORT}`);
   console.log(`   Twitch / IGDB credentials → ${credentialSource(db)} (configured: ${hasIgdbCredentials(db)})`);
+});
+
+server.on('error', (err) => {
+  if (err?.code === 'EADDRINUSE') {
+    console.error(
+      `❌ Port ${PORT} is already in use. Stop the old API process (Task Manager → end "Node.js", or close the other terminal), then run npm run dev again.`
+    );
+  } else {
+    console.error('❌ API server failed to start:', err?.message || err);
+  }
+  process.exit(1);
 });

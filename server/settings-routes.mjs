@@ -1,8 +1,10 @@
 // server/settings-routes.mjs — local profile + Twitch developer credentials (IGDB)
 import { Router } from 'express';
 import { credentialSource, getEnvTwitchCredentials, hasIgdbCredentials } from './twitch-credentials.mjs';
+import { llmSettingsForClient } from './guide/llm-settings.mjs';
 
 const MAX_PROFILE_IMAGE_CHARS = 450_000; // ~330KB base64 data URLs
+const LLM_PROVIDERS = new Set(['none', 'ollama', 'gemini', 'openai']);
 
 function badRequest(res, message) {
   return res.status(400).json({ error: message });
@@ -31,6 +33,7 @@ export function createSettingsRouter(db, hooks = {}) {
         hasTwitchCredentials: hasCreds,
         onboardingComplete,
         credentialSource: credentialSource(db),
+        ...llmSettingsForClient(db),
       });
     } catch (e) {
       console.error('GET /api/profile', e);
@@ -86,6 +89,28 @@ export function createSettingsRouter(db, hooks = {}) {
       onboardingComplete = Boolean(body.onboardingComplete);
     }
 
+    let llmProvider = row.llm_provider ?? 'none';
+    if (Object.prototype.hasOwnProperty.call(body, 'llmProvider')) {
+      const p = String(body.llmProvider || 'none').toLowerCase();
+      if (!LLM_PROVIDERS.has(p)) {
+        return badRequest(res, 'llmProvider must be none, ollama, gemini, or openai');
+      }
+      llmProvider = p;
+    }
+
+    let llmApiKey = row.llm_api_key;
+    if (Object.prototype.hasOwnProperty.call(body, 'llmApiKey')) {
+      const v = body.llmApiKey;
+      llmApiKey = v == null || v === '' ? null : String(v).trim();
+    }
+
+    let ollamaBaseUrl = row.ollama_base_url ?? 'http://127.0.0.1:11434';
+    if (Object.prototype.hasOwnProperty.call(body, 'ollamaBaseUrl')) {
+      const v = body.ollamaBaseUrl;
+      ollamaBaseUrl =
+        v == null || v === '' ? 'http://127.0.0.1:11434' : String(v).trim().replace(/\/$/, '');
+    }
+
     const nextId = twitchClientId ?? '';
     const nextSecret = twitchClientSecret ?? '';
     if (nextId && !nextSecret && !getEnvTwitchCredentials()) {
@@ -102,14 +127,20 @@ export function createSettingsRouter(db, hooks = {}) {
           profile_image_url = ?,
           twitch_client_id = ?,
           twitch_client_secret = ?,
-          onboarding_complete = ?
+          onboarding_complete = ?,
+          llm_provider = ?,
+          llm_api_key = ?,
+          ollama_base_url = ?
         WHERE singleton = 1`
       ).run(
         displayName,
         profileImageUrl,
         twitchClientId,
         twitchClientSecret,
-        onboardingComplete ? 1 : 0
+        onboardingComplete ? 1 : 0,
+        llmProvider,
+        llmApiKey,
+        ollamaBaseUrl
       );
 
       if (credsChanged && typeof hooks.onCredentialsChanged === 'function') {
@@ -123,6 +154,7 @@ export function createSettingsRouter(db, hooks = {}) {
         hasTwitchCredentials: hasIgdbCredentials(db),
         onboardingComplete: Number(updated.onboarding_complete) === 1,
         credentialSource: credentialSource(db),
+        ...llmSettingsForClient(db),
       });
     } catch (e) {
       console.error('PATCH /api/profile', e);
